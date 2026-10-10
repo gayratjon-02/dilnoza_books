@@ -1,6 +1,7 @@
 package dilnoza.books.ui.editor
 
 import android.graphics.Rect
+import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToKeyAction
@@ -54,6 +55,63 @@ class EditorZoomTest {
         rule.waitForIdle()
         val zoomedOut = robot.zoomPercent()
         assertTrue("pinch-in should zoom out from $zoomedIn%, zoom is $zoomedOut%", zoomedOut < zoomedIn)
+    }
+
+    @Test
+    fun pinchKeepsTheTextUnderTheFingersInPlace() {
+        robot.tapField(robot.blockFields().first())
+        robot.pasteText(List(300) { "soʻz${it % 10}" }.joinToString(" "))
+        robot.hideKeyboard()
+        rule.waitForIdle()
+        val field = robot.blockField("soʻz0")
+        val list = robot.pageListOnScreen()
+        // A spot in the lower right part of the page, where zooming from the corner would lose it.
+        val focus = androidx.compose.ui.geometry.Offset(list.left + list.width() * 0.7f, list.top + list.height() * 0.6f)
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        field.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        val coordinates = field.layoutInfo.coordinates
+        val local = coordinates.localPositionOf(coordinates.findRootCoordinates(), focus - robot.rootOnScreen())
+        val offset = layouts.single().getOffsetForPosition(local)
+        val before = robot.textPointOnScreen(field, offset)
+
+        pinchAround(focus)
+        val zoom = robot.zoomPercent()
+        assertTrue("pinch-out should zoom in, zoom is $zoom%", zoom > 130)
+
+        val after = robot.textPointOnScreen(robot.blockField("soʻz0"), offset)
+        val moved = (after - before).getDistance()
+        robot.screenshot("pinch_focus")
+        assertTrue("text under the fingers moved ${moved.roundToInt()} px ($before -> $after) at $zoom%", moved < list.width() * 0.12f)
+    }
+
+    /** Two fingers moving apart symmetrically around [center]. */
+    private fun pinchAround(center: androidx.compose.ui.geometry.Offset) {
+        val start = 60f
+        val end = 260f
+        val steps = 30
+        val downTime = android.os.SystemClock.uptimeMillis()
+        fun pointers(d: Float) = arrayOf(
+            android.view.MotionEvent.PointerCoords().apply { x = center.x - d; y = center.y - d; pressure = 1f; size = 1f },
+            android.view.MotionEvent.PointerCoords().apply { x = center.x + d; y = center.y + d; pressure = 1f; size = 1f },
+        )
+        val properties = Array(2) { id -> android.view.MotionEvent.PointerProperties().apply { this.id = id; toolType = android.view.MotionEvent.TOOL_TYPE_FINGER } }
+        fun send(action: Int, d: Float, count: Int = 2) {
+            val event = android.view.MotionEvent.obtain(
+                downTime, android.os.SystemClock.uptimeMillis(), action, count, properties.copyOf(count).requireNoNulls(),
+                pointers(d).copyOf(count).requireNoNulls(), 0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0,
+            )
+            robot.instrumentation.uiAutomation.injectInputEvent(event, true)
+            event.recycle()
+        }
+        send(android.view.MotionEvent.ACTION_DOWN, start, count = 1)
+        send(android.view.MotionEvent.ACTION_POINTER_DOWN or (1 shl android.view.MotionEvent.ACTION_POINTER_INDEX_SHIFT), start)
+        for (step in 1..steps) {
+            send(android.view.MotionEvent.ACTION_MOVE, start + (end - start) * step / steps)
+            android.os.SystemClock.sleep(16)
+        }
+        send(android.view.MotionEvent.ACTION_POINTER_UP or (1 shl android.view.MotionEvent.ACTION_POINTER_INDEX_SHIFT), end)
+        send(android.view.MotionEvent.ACTION_UP, end, count = 1)
+        rule.waitForIdle()
     }
 
     @Test

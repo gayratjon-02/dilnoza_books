@@ -18,6 +18,7 @@ import androidx.compose.foundation.content.hasMediaType
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -97,6 +98,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -182,6 +184,38 @@ fun EditorScreen(
     // The block list is laid out in page points (see PointSpace); scroll maths uses the same units.
     val density = PageMeasurer.PointDensity
     var pageScale by remember { mutableFloatStateOf(1f) }
+    val pageScroll = rememberScrollState()
+    var viewportWidth by remember { mutableIntStateOf(0) }
+    // Screen pixels per page point at 100%.
+    var fitWidthScale by remember { mutableFloatStateOf(0f) }
+    // Sideways scroll position wanted after a pinch, applied once the wider pages are laid out.
+    var pendingPageScroll by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(pageScroll) {
+        snapshotFlow { pageScroll.maxValue }.collect {
+            pendingPageScroll?.let { target ->
+                pendingPageScroll = null
+                pageScroll.scrollTo(target)
+            }
+        }
+    }
+
+    /** Zooms by [factor] keeping the page point under the fingers' [focus] (in list coordinates) where it is. */
+    fun pinch(factor: Float, focus: Offset) {
+        val oldZoom = viewModel.zoom
+        viewModel.zoomBy(factor)
+        val ratio = viewModel.zoom / oldZoom
+        if (ratio == 1f || fitWidthScale <= 0f) return
+        // From the zoom itself: several pinch steps can arrive before the pages are drawn again.
+        val oldScale = fitWidthScale * oldZoom
+        val newScale = fitWidthScale * viewModel.zoom
+        // Vertically the list is laid out in points: move it by the distance the focus drifts in points.
+        listState.dispatchRawDelta(focus.y / oldScale - focus.y / newScale)
+        // Sideways the pages are viewportWidth * zoom wide, centred while narrower than the screen.
+        val oldLeft = (viewportWidth * (1f - oldZoom) / 2f).coerceAtLeast(0f)
+        val newLeft = (viewportWidth * (1f - viewModel.zoom) / 2f).coerceAtLeast(0f)
+        val x = ((pendingPageScroll ?: pageScroll.value) + focus.x - oldLeft) * ratio + newLeft - focus.x
+        pendingPageScroll = x.roundToInt().coerceAtLeast(0)
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     var listTopInRoot by remember { mutableFloatStateOf(0f) }
     var listBottomInRoot by remember { mutableFloatStateOf(0f) }
@@ -405,13 +439,17 @@ fun EditorScreen(
                                 Modifier
                             },
                         )
-                        .pinchToZoom(viewModel::zoomBy),
+                        .pinchToZoom(::pinch),
                 ) {
                     // At 100% the page fills the screen width; everything inside is laid out in page points,
                     // so zooming only scales the drawing and never moves a line or page break.
                     val deskWidthPt = viewModel.pageSpec.widthPt + 2 * DESK_PADDING_PT
                     val scale = constraints.maxWidth / deskWidthPt * viewModel.zoom
-                    SideEffect { pageScale = scale }
+                    SideEffect {
+                        pageScale = scale
+                        viewportWidth = constraints.maxWidth
+                        fitWidthScale = constraints.maxWidth / deskWidthPt
+                    }
                     // Zooming out stops where a whole page is in view. The keyboard does not count: the
                     // smallest zoom must not jump while typing.
                     val screenDensity = LocalDensity.current
@@ -427,7 +465,7 @@ fun EditorScreen(
                             // Narrower than the screen when zoomed out: the pages stay in the middle.
                             .align(Alignment.TopCenter)
                             .fillMaxHeight()
-                            .horizontalScroll(rememberScrollState(), enabled = viewModel.zoom > 1f)
+                            .horizontalScroll(pageScroll, enabled = viewModel.zoom > 1f)
                             .width(deskWidth),
                     ) {
                         LazyColumn(
@@ -1117,7 +1155,7 @@ private fun ZoomControl(
  * Two-finger pinch changes the zoom; one finger is left alone so the pages still scroll and the
  * text can be tapped and selected.
  */
-private fun Modifier.pinchToZoom(onZoom: (Float) -> Unit): Modifier = pointerInput(Unit) {
+private fun Modifier.pinchToZoom(onZoom: (factor: Float, focus: Offset) -> Unit): Modifier = pointerInput(Unit) {
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false)
         do {
@@ -1125,7 +1163,7 @@ private fun Modifier.pinchToZoom(onZoom: (Float) -> Unit): Modifier = pointerInp
             if (event.changes.count { it.pressed } >= 2) {
                 val factor = event.calculateZoom()
                 if (factor != 1f) {
-                    onZoom(factor)
+                    onZoom(factor, event.calculateCentroid(useCurrent = true))
                     event.changes.forEach { it.consume() }
                 }
             }
