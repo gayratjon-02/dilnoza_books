@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_title">Мои книги</string>
+    <string name="library_empty_title">Пока нет книг</string>
+    <string name="library_empty_body">Начните писать свою первую книгу</string>
+    <string name="library_start_writing">Начать писать книгу</string>
+    <string name="library_new_book">Новая книга</string>
+    <string name="library_edited">Изменено: %1$s</string>
+    <string name="book_create_title">Новая книга</string>
+    <string name="book_edit_title">Редактировать книгу</string>
+    <string name="book_field_title">Название</string>
+    <string name="book_field_author">Автор</string>
+    <string name="book_delete_title">Удалить книгу?</string>
+    <string name="book_delete_body">«%1$s» и все её главы будут удалены безвозвратно.</string>
+    <plurals name="chapter_count">
+        <item quantity="one">%d глава</item>
+        <item quantity="few">%d главы</item>
+        <item quantity="many">%d глав</item>
+        <item quantity="other">%d главы</item>
+    </plurals>
+</resources>

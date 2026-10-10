@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_title_hint">Bob nomi</string>
+    <string name="editor_body_hint">Yozishni boshlang…</string>
+    <string name="editor_heading_hint">Sarlavha</string>
+    <string name="editor_add_paragraph">Matn qoʻshish</string>
+    <string name="editor_add_heading">Sarlavha qoʻshish</string>
+    <string name="editor_make_heading">Sarlavhaga aylantirish</string>
+    <string name="editor_make_paragraph">Oddiy matnga aylantirish</string>
+    <string name="editor_delete_block">Blokni oʻchirish</string>
+    <string name="save_status_saved">Saqlandi</string>
+    <string name="save_status_saving">Saqlanmoqda…</string>
+    <string name="save_status_error">Saqlanmadi</string>
+    <plurals name="editor_word_count">
+        <item quantity="one">%d ta soʻz</item>
+        <item quantity="other">%d ta soʻz</item>
+    </plurals>
+</resources>

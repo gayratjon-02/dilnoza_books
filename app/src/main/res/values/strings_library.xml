@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_title">My books</string>
+    <string name="library_empty_title">No books yet</string>
+    <string name="library_empty_body">Start writing your first book</string>
+    <string name="library_start_writing">Start writing a book</string>
+    <string name="library_new_book">New book</string>
+    <string name="library_edited">Edited %1$s</string>
+    <string name="book_create_title">New book</string>
+    <string name="book_edit_title">Edit book</string>
+    <string name="book_field_title">Title</string>
+    <string name="book_field_author">Author</string>
+    <string name="book_delete_title">Delete this book?</string>
+    <string name="book_delete_body">“%1$s” and all its chapters will be deleted permanently.</string>
+    <plurals name="chapter_count">
+        <item quantity="one">%d chapter</item>
+        <item quantity="other">%d chapters</item>
+    </plurals>
+</resources>

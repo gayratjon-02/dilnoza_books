@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_title_hint">Chapter title</string>
+    <string name="editor_body_hint">Start writing…</string>
+    <string name="editor_heading_hint">Heading</string>
+    <string name="editor_add_paragraph">Add text</string>
+    <string name="editor_add_heading">Add heading</string>
+    <string name="editor_make_heading">Turn into heading</string>
+    <string name="editor_make_paragraph">Turn into text</string>
+    <string name="editor_delete_block">Delete block</string>
+    <string name="save_status_saved">Saved</string>
+    <string name="save_status_saving">Saving…</string>
+    <string name="save_status_error">Not saved</string>
+    <plurals name="editor_word_count">
+        <item quantity="one">%d word</item>
+        <item quantity="other">%d words</item>
+    </plurals>
+</resources>

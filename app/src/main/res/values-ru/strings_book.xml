@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chapters_empty_title">Пока нет глав</string>
+    <string name="chapters_empty_body">Добавьте главу, чтобы продолжить писать</string>
+    <string name="chapter_new">Новая глава</string>
+    <string name="chapter_default_title">Глава %1$d</string>
+    <string name="chapter_field_title">Название главы</string>
+    <string name="chapter_rename_title">Переименовать главу</string>
+    <string name="chapter_delete_title">Удалить главу?</string>
+    <string name="chapter_delete_body">«%1$s» и весь её текст будут удалены безвозвратно.</string>
+</resources>

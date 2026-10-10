@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="library_title">Kitoblarim</string>
-    <string name="library_empty_title">Hali kitob yoʻq</string>
-    <string name="library_empty_body">Birinchi kitobingizni yozishni boshlang</string>
+    <string name="action_create">Yaratish</string>
+    <string name="action_save">Saqlash</string>
+    <string name="action_cancel">Bekor qilish</string>
+    <string name="action_delete">Oʻchirish</string>
+    <string name="action_rename">Nomini oʻzgartirish</string>
+    <string name="action_edit">Tahrirlash</string>
+    <string name="action_move_up">Yuqoriga</string>
+    <string name="action_move_down">Pastga</string>
+    <string name="action_back">Orqaga</string>
+    <string name="action_more">Boshqa amallar</string>
 </resources>

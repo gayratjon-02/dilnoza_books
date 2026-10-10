@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_title_hint">Название главы</string>
+    <string name="editor_body_hint">Начните писать…</string>
+    <string name="editor_heading_hint">Заголовок</string>
+    <string name="editor_add_paragraph">Добавить текст</string>
+    <string name="editor_add_heading">Добавить заголовок</string>
+    <string name="editor_make_heading">Сделать заголовком</string>
+    <string name="editor_make_paragraph">Сделать обычным текстом</string>
+    <string name="editor_delete_block">Удалить блок</string>
+    <string name="save_status_saved">Сохранено</string>
+    <string name="save_status_saving">Сохранение…</string>
+    <string name="save_status_error">Не сохранено</string>
+    <plurals name="editor_word_count">
+        <item quantity="one">%d слово</item>
+        <item quantity="few">%d слова</item>
+        <item quantity="many">%d слов</item>
+        <item quantity="other">%d слова</item>
+    </plurals>
+</resources>

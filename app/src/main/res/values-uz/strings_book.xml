@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chapters_empty_title">Hali bob yoʻq</string>
+    <string name="chapters_empty_body">Yozishni davom ettirish uchun bob qoʻshing</string>
+    <string name="chapter_new">Yangi bob</string>
+    <string name="chapter_default_title">%1$d-bob</string>
+    <string name="chapter_field_title">Bob nomi</string>
+    <string name="chapter_rename_title">Bob nomini oʻzgartirish</string>
+    <string name="chapter_delete_title">Bob oʻchirilsinmi?</string>
+    <string name="chapter_delete_body">“%1$s” va undagi barcha matn butunlay oʻchiriladi.</string>
+</resources>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_title">Kitoblarim</string>
+    <string name="library_empty_title">Hali kitob yoʻq</string>
+    <string name="library_empty_body">Birinchi kitobingizni yozishni boshlang</string>
+    <string name="library_start_writing">Kitob yozishni boshlash</string>
+    <string name="library_new_book">Yangi kitob</string>
+    <string name="library_edited">Tahrir: %1$s</string>
+    <string name="book_create_title">Yangi kitob</string>
+    <string name="book_edit_title">Kitobni tahrirlash</string>
+    <string name="book_field_title">Kitob nomi</string>
+    <string name="book_field_author">Muallif</string>
+    <string name="book_delete_title">Kitob oʻchirilsinmi?</string>
+    <string name="book_delete_body">“%1$s” va undagi barcha boblar butunlay oʻchiriladi.</string>
+    <plurals name="chapter_count">
+        <item quantity="one">%d ta bob</item>
+        <item quantity="other">%d ta bob</item>
+    </plurals>
+</resources>

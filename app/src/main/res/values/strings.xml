@@ -2,7 +2,14 @@
 <resources>
     <string name="app_name" translatable="false">Dilnoza Books</string>
 
-    <string name="library_title">My books</string>
-    <string name="library_empty_title">No books yet</string>
-    <string name="library_empty_body">Start writing your first book</string>
+    <string name="action_create">Create</string>
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_move_up">Move up</string>
+    <string name="action_move_down">Move down</string>
+    <string name="action_back">Back</string>
+    <string name="action_more">More options</string>
 </resources>

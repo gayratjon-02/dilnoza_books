@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="library_title">Мои книги</string>
-    <string name="library_empty_title">Пока нет книг</string>
-    <string name="library_empty_body">Начните писать свою первую книгу</string>
+    <string name="action_create">Создать</string>
+    <string name="action_save">Сохранить</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_delete">Удалить</string>
+    <string name="action_rename">Переименовать</string>
+    <string name="action_edit">Изменить</string>
+    <string name="action_move_up">Вверх</string>
+    <string name="action_move_down">Вниз</string>
+    <string name="action_back">Назад</string>
+    <string name="action_more">Другие действия</string>
 </resources>
