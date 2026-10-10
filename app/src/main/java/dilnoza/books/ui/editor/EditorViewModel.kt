@@ -3,6 +3,7 @@ package dilnoza.books.ui.editor
 import android.os.ParcelFileDescriptor
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -80,6 +81,10 @@ class EditorViewModel @Inject constructor(
     var title by mutableStateOf(TextFieldValue())
         private set
     var pageSpec by mutableStateOf(PageSpec.of(PageSize.A5, DEFAULT_MARGIN_MM))
+        private set
+
+    /** Page magnification over "page fits the screen width"; line breaks never change with it. */
+    var zoom by mutableFloatStateOf(1f)
         private set
 
     /** Number printed on this chapter's first page; pages are numbered across the whole book. */
@@ -484,6 +489,22 @@ class EditorViewModel @Inject constructor(
         focusRequest = FocusRequest(last.id)
     }
 
+    val canZoomIn: Boolean get() = zoom < MAX_ZOOM - ZOOM_EPSILON
+    val canZoomOut: Boolean get() = zoom > MIN_ZOOM + ZOOM_EPSILON
+
+    fun zoomIn() {
+        zoom = ZOOM_STEPS.firstOrNull { it > zoom + ZOOM_EPSILON } ?: MAX_ZOOM
+    }
+
+    fun zoomOut() {
+        zoom = ZOOM_STEPS.lastOrNull { it < zoom - ZOOM_EPSILON } ?: MIN_ZOOM
+    }
+
+    /** Pinch: continuous zoom by [factor], kept within the supported range. */
+    fun zoomBy(factor: Float) {
+        zoom = (zoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+    }
+
     /** Starts a new page after the last block and puts the caret on it. */
     fun addPage() {
         history.record(historyEntry())
@@ -867,6 +888,10 @@ class EditorViewModel @Inject constructor(
         val WHITESPACE = Regex("\\s+")
         const val TITLE_TYPING = "title"
         const val DEFAULT_MARGIN_MM = 20
+        const val MIN_ZOOM = 1f
+        const val MAX_ZOOM = 2.5f
+        const val ZOOM_EPSILON = 0.01f
+        val ZOOM_STEPS = listOf(1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f)
         const val TYPING_COALESCE_MILLIS = 2000L
 
         fun countWords(text: String): Int = text.split(WHITESPACE).count { it.isNotEmpty() }
