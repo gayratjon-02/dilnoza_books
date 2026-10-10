@@ -1,10 +1,11 @@
 package dilnoza.books.ui.editor.page
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.LayoutDirection
@@ -19,22 +20,31 @@ import dilnoza.books.ui.editor.EditorBlock
 import dilnoza.books.ui.editor.PageGap
 import dilnoza.books.ui.editor.toAnnotatedString
 
-/** Pagination of the open chapter: where every block sits on the stacked pages. */
-@Stable
-class EditorPages(
+/**
+ * Pagination of the open chapter: where every block sits on the stacked pages. Compared by value, so
+ * an edit that moves no line or page leaves readers alone instead of recomposing the whole editor.
+ */
+@Immutable
+data class EditorPages(
     val plan: PagePlan,
-    private val items: Map<String, FlowItem>,
+    /** Page gaps inside the text blocks that continue on the next page, as character offsets. */
+    private val gaps: Map<String, List<PageGap>>,
 ) {
-    /** Page gaps inside a text block that continues on the next page, as character offsets. */
-    fun gapsOf(blockId: String): List<PageGap> {
-        val block = plan.blocks[blockId] ?: return emptyList()
-        if (block.innerGaps.isEmpty()) return emptyList()
-        val starts = (items[blockId] as? FlowItem.Text)?.lineStarts ?: return emptyList()
-        return block.innerGaps.mapNotNull { gap -> starts.getOrNull(gap.beforeLine)?.let { PageGap(it, gap.heightPt) } }
-    }
+    fun gapsOf(blockId: String): List<PageGap> = gaps[blockId].orEmpty()
 
     companion object {
         const val GAP_PT = 18f
+
+        fun of(plan: PagePlan, items: List<FlowItem>): EditorPages {
+            val gaps = HashMap<String, List<PageGap>>()
+            for (item in items) {
+                if (item !is FlowItem.Text) continue
+                val inner = plan.blocks[item.blockId]?.innerGaps.orEmpty()
+                if (inner.isEmpty()) continue
+                gaps[item.blockId] = inner.mapNotNull { gap -> item.lineStarts.getOrNull(gap.beforeLine)?.let { PageGap(it, gap.heightPt) } }
+            }
+            return EditorPages(plan, gaps)
+        }
     }
 }
 
@@ -58,7 +68,7 @@ fun rememberEditorPages(
     val cache = remember(measurer) { HashMap<String, Pair<Any, FlowItem>>() }
     val paginator = remember(spec) { Paginator(spec.contentHeightPt) }
     val pages by remember(measurer, blocks) {
-        derivedStateOf {
+        derivedStateOf(structuralEqualityPolicy()) {
             val titleText = title()
             val titleItem = cache.cached(PageMeasurer.TITLE_ID, titleText) { measurer.measureTitle(titleText) }
             val captionShown = captionShownFor()
@@ -70,10 +80,7 @@ fun rememberEditorPages(
             }
             cache.keys.retainAll(items.mapTo(HashSet()) { it.blockId })
             val pagination = paginator.paginate(items)
-            EditorPages(
-                plan = PagePlan.build(spec, EditorPages.GAP_PT, items.map { it.blockId }, pagination),
-                items = items.associateBy { it.blockId },
-            )
+            EditorPages.of(PagePlan.build(spec, EditorPages.GAP_PT, items.map { it.blockId }, pagination), items)
         }
     }
     return pages
