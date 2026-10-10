@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.HideImage
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -84,12 +85,16 @@ fun BookScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val coverFailed = stringResource(R.string.book_cover_failed)
+    val exported = stringResource(R.string.export_done)
+    val exportFailed = stringResource(R.string.export_failed)
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
                 is BookEvent.OpenChapter -> onOpenChapter(event.chapterId)
                 BookEvent.CoverFailed -> snackbar.showSnackbar(coverFailed)
+                BookEvent.Exported -> snackbar.showSnackbar(exported)
+                BookEvent.ExportFailed -> snackbar.showSnackbar(exportFailed)
             }
         }
     }
@@ -106,6 +111,7 @@ fun BookScreen(
         pageRanges = state.pageRanges,
         coverFile = state.coverFile,
         coverImporting = state.coverImporting,
+        exporting = state.exporting,
         snackbar = snackbar,
         onAction = viewModel::onAction,
         onBack = onBack,
@@ -121,6 +127,7 @@ private fun BookContent(
     pageRanges: Map<String, IntRange>,
     coverFile: File?,
     coverImporting: Boolean,
+    exporting: Boolean,
     snackbar: SnackbarHostState,
     onAction: (BookAction) -> Unit,
     onBack: () -> Unit,
@@ -136,6 +143,10 @@ private fun BookContent(
         if (uri != null) context.contentResolver.openImageSources(listOf(uri)).firstOrNull()?.let { onAction(BookAction.SetCover(it)) }
     }
 
+    val savePdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(PDF_MIME)) { uri ->
+        if (uri != null) onAction(BookAction.ExportPdf(uri))
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
@@ -147,6 +158,13 @@ private fun BookContent(
                     }
                 },
                 actions = {
+                    if (exporting) {
+                        CircularProgressIndicator(modifier = Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(onClick = { savePdf.launch(pdfFileName(book.title)) }) {
+                            Icon(Icons.Outlined.PictureAsPdf, contentDescription = stringResource(R.string.export_pdf))
+                        }
+                    }
                     IconButton(onClick = { editingBook = true }) {
                         Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.book_edit_title))
                     }
@@ -448,3 +466,9 @@ private fun PageSize.label() = when (this) {
     PageSize.A4 -> R.string.page_size_a4
     PageSize.LETTER -> R.string.page_size_letter
 }
+
+private const val PDF_MIME = "application/pdf"
+
+/** The book title as a file name; characters file systems reject are replaced. */
+private fun pdfFileName(title: String): String =
+    title.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_").ifEmpty { "book" } + ".pdf"

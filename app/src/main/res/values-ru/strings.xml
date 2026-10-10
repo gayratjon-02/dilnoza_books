@@ -14,4 +14,7 @@
     <string name="book_cover_change">Заменить обложку</string>
     <string name="book_cover_remove">Убрать обложку</string>
     <string name="book_cover_failed">Не удалось сделать это изображение обложкой</string>
+    <string name="export_pdf">Сохранить в PDF</string>
+    <string name="export_done">PDF сохранён</string>
+    <string name="export_failed">Не удалось создать PDF</string>
 </resources>

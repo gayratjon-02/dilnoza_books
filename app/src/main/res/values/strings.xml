@@ -16,4 +16,7 @@
     <string name="book_cover_change">Change cover picture</string>
     <string name="book_cover_remove">Remove cover picture</string>
     <string name="book_cover_failed">Couldn’t use this picture as the cover</string>
+    <string name="export_pdf">Export as PDF</string>
+    <string name="export_done">PDF saved</string>
+    <string name="export_failed">Couldn’t create the PDF</string>
 </resources>

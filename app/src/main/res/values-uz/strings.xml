@@ -14,4 +14,7 @@
     <string name="book_cover_change">Muqova rasmini almashtirish</string>
     <string name="book_cover_remove">Muqova rasmini olib tashlash</string>
     <string name="book_cover_failed">Bu rasmni muqova qilib boʻlmadi</string>
+    <string name="export_pdf">PDF qilib saqlash</string>
+    <string name="export_done">PDF saqlandi</string>
+    <string name="export_failed">PDF yaratib boʻlmadi</string>
 </resources>

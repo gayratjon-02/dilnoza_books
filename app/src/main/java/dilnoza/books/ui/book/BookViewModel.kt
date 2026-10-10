@@ -1,19 +1,25 @@
 package dilnoza.books.ui.book
 
+import android.content.Context
+import android.net.Uri
 import android.os.ParcelFileDescriptor
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dilnoza.books.core.di.ApplicationScope
 import dilnoza.books.data.files.ImageStore
 import dilnoza.books.domain.model.Book
 import dilnoza.books.domain.model.Chapter
 import dilnoza.books.domain.model.PageSize
+import dilnoza.books.domain.repository.BlockRepository
 import dilnoza.books.domain.repository.BookRepository
 import dilnoza.books.domain.repository.ChapterRepository
 import dilnoza.books.editor.layout.PageSpec
+import dilnoza.books.export.pdf.ExportChapter
+import dilnoza.books.export.pdf.PdfExporter
 import dilnoza.books.ui.editor.page.BookPageCounter
 import dilnoza.books.ui.navigation.BookRoute
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +45,7 @@ data class BookUiState(
     val pageRanges: Map<String, IntRange> = emptyMap(),
     val coverFile: File? = null,
     val coverImporting: Boolean = false,
+    val exporting: Boolean = false,
 )
 
 sealed interface BookAction {
@@ -51,11 +58,15 @@ sealed interface BookAction {
     /** The descriptor is opened by the screen while it still holds the picker's URI grant. */
     data class SetCover(val source: ParcelFileDescriptor) : BookAction
     data object RemoveCover : BookAction
+    /** [target] is a document the writer created with the system file picker. */
+    data class ExportPdf(val target: Uri) : BookAction
 }
 
 sealed interface BookEvent {
     data class OpenChapter(val chapterId: String) : BookEvent
     data object CoverFailed : BookEvent
+    data object Exported : BookEvent
+    data object ExportFailed : BookEvent
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -66,24 +77,30 @@ class BookViewModel @Inject constructor(
     private val chapters: ChapterRepository,
     private val pageCounter: BookPageCounter,
     private val imageStore: ImageStore,
+    private val blocks: BlockRepository,
+    private val pdfExporter: PdfExporter,
+    @ApplicationContext private val context: Context,
     @ApplicationScope private val appScope: CoroutineScope,
 ) : ViewModel() {
 
     private val bookId = savedStateHandle.toRoute<BookRoute>().bookId
 
     private val coverImporting = MutableStateFlow(false)
+    private val exporting = MutableStateFlow(false)
 
     val state: StateFlow<BookUiState> = combine(
         books.observeBook(bookId),
         chapters.observeChapters(bookId),
         coverImporting,
-    ) { book, chapters, importing ->
+        exporting,
+    ) { book, chapters, importing, exportRunning ->
         BookUiState(
             loading = false,
             book = book,
             chapters = chapters,
             coverFile = book?.coverPath?.let { imageStore.coverFile(bookId, it) },
             coverImporting = importing,
+            exporting = exportRunning,
         )
     }
         .transformLatest { state ->
@@ -116,6 +133,7 @@ class BookViewModel @Inject constructor(
                 is BookAction.SetPageSize -> books.updatePageSize(bookId, action.pageSize)
                 is BookAction.SetCover -> setCover(action.source)
                 BookAction.RemoveCover -> books.updateCover(bookId, null)
+                is BookAction.ExportPdf -> exportPdf(action.target)
             }
         }
     }
@@ -128,6 +146,25 @@ class BookViewModel @Inject constructor(
             if (stored != null) books.updateCover(bookId, stored)
             coverImporting.value = false
             if (stored == null) _events.send(BookEvent.CoverFailed)
+        }
+    }
+
+    private fun exportPdf(target: Uri) {
+        val book = state.value.book ?: return
+        val chapters = state.value.chapters
+        if (exporting.value) return
+        exporting.value = true
+        // Application scope: leaving the screen must not leave a half-written file behind.
+        appScope.launch {
+            val done = runCatching {
+                val parts = chapters.map { ExportChapter(it, blocks.getBlocks(it.id)) }
+                val cover = book.coverPath?.let { imageStore.coverFile(bookId, it) }
+                checkNotNull(context.contentResolver.openOutputStream(target, "wt")).use { out ->
+                    pdfExporter.export(book, parts, cover, { imageStore.imageFile(bookId, it) }, out)
+                }
+            }.isSuccess
+            exporting.value = false
+            _events.send(if (done) BookEvent.Exported else BookEvent.ExportFailed)
         }
     }
 }
