@@ -52,10 +52,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dilnoza.books.R
+import dilnoza.books.domain.model.Book
 import dilnoza.books.domain.model.BookSummary
 import dilnoza.books.ui.components.ConfirmDeleteDialog
 import dilnoza.books.ui.components.EmptyState
 import dilnoza.books.ui.components.TextFieldsDialog
+import java.io.File
 
 @Composable
 fun LibraryScreen(
@@ -73,13 +75,14 @@ fun LibraryScreen(
         }
     }
 
-    LibraryContent(state = state, onAction = viewModel::onAction, onOpenBook = onOpenBook)
+    LibraryContent(state = state, coverFile = viewModel::coverFile, onAction = viewModel::onAction, onOpenBook = onOpenBook)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LibraryContent(
     state: LibraryUiState,
+    coverFile: (Book) -> File?,
     onAction: (LibraryAction) -> Unit,
     onOpenBook: (String) -> Unit,
 ) {
@@ -134,6 +137,7 @@ private fun LibraryContent(
                 items(state.books, key = { it.book.id }) { summary ->
                     BookCard(
                         summary = summary,
+                        coverFile = coverFile(summary.book),
                         onClick = { onOpenBook(summary.book.id) },
                         onEdit = { editingId = summary.book.id },
                         onDelete = { deletingId = summary.book.id },
@@ -192,6 +196,7 @@ private fun LibraryContent(
 @Composable
 private fun BookCard(
     summary: BookSummary,
+    coverFile: File?,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -215,7 +220,7 @@ private fun BookCard(
                 .padding(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BookCover(title = book.title, color = book.coverColor)
+            BookCover(title = book.title, color = book.coverColor, file = coverFile)
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(

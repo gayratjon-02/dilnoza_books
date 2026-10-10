@@ -10,4 +10,8 @@
     <string name="action_move_down">Pastga</string>
     <string name="action_back">Orqaga</string>
     <string name="action_more">Boshqa amallar</string>
+    <string name="book_cover_add">Muqova rasmini qoʻshish</string>
+    <string name="book_cover_change">Muqova rasmini almashtirish</string>
+    <string name="book_cover_remove">Muqova rasmini olib tashlash</string>
+    <string name="book_cover_failed">Bu rasmni muqova qilib boʻlmadi</string>
 </resources>

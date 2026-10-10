@@ -3,6 +3,8 @@ package dilnoza.books.ui.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dilnoza.books.data.files.ImageStore
+import dilnoza.books.domain.model.Book
 import dilnoza.books.domain.model.BookSummary
 import dilnoza.books.domain.repository.BookRepository
 import kotlinx.coroutines.channels.Channel
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 data class LibraryUiState(
@@ -33,7 +36,10 @@ sealed interface LibraryEvent {
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val books: BookRepository,
+    private val imageStore: ImageStore,
 ) : ViewModel() {
+
+    fun coverFile(book: Book): File? = book.coverPath?.let { imageStore.coverFile(book.id, it) }
 
     val state: StateFlow<LibraryUiState> = books.observeBooks()
         .map { LibraryUiState(loading = false, books = it) }

@@ -1,5 +1,8 @@
 package dilnoza.books.ui.book
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -27,7 +30,10 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.HideImage
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,6 +44,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -49,6 +57,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,7 +71,9 @@ import dilnoza.books.domain.model.PageSize
 import dilnoza.books.ui.components.ConfirmDeleteDialog
 import dilnoza.books.ui.components.EmptyState
 import dilnoza.books.ui.components.TextFieldsDialog
+import dilnoza.books.ui.editor.openImageSources
 import dilnoza.books.ui.library.BookCover
+import java.io.File
 
 @Composable
 fun BookScreen(
@@ -70,11 +82,14 @@ fun BookScreen(
     viewModel: BookViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val coverFailed = stringResource(R.string.book_cover_failed)
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
                 is BookEvent.OpenChapter -> onOpenChapter(event.chapterId)
+                BookEvent.CoverFailed -> snackbar.showSnackbar(coverFailed)
             }
         }
     }
@@ -89,6 +104,9 @@ fun BookScreen(
         book = book,
         chapters = state.chapters,
         pageRanges = state.pageRanges,
+        coverFile = state.coverFile,
+        coverImporting = state.coverImporting,
+        snackbar = snackbar,
         onAction = viewModel::onAction,
         onBack = onBack,
         onOpenChapter = onOpenChapter,
@@ -101,6 +119,9 @@ private fun BookContent(
     book: Book,
     chapters: List<Chapter>,
     pageRanges: Map<String, IntRange>,
+    coverFile: File?,
+    coverImporting: Boolean,
+    snackbar: SnackbarHostState,
     onAction: (BookAction) -> Unit,
     onBack: () -> Unit,
     onOpenChapter: (String) -> Unit,
@@ -110,7 +131,13 @@ private fun BookContent(
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     val newChapterTitle = stringResource(R.string.chapter_default_title, chapters.size + 1)
 
+    val context = LocalContext.current
+    val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) context.contentResolver.openImageSources(listOf(uri)).firstOrNull()?.let { onAction(BookAction.SetCover(it)) }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -142,7 +169,14 @@ private fun BookContent(
             ),
         ) {
             item(key = "header") {
-                BookHeader(book = book, onPageSize = { onAction(BookAction.SetPageSize(it)) })
+                BookHeader(
+                    book = book,
+                    coverFile = coverFile,
+                    coverImporting = coverImporting,
+                    onPickCover = { pickCover.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onRemoveCover = { onAction(BookAction.RemoveCover) },
+                    onPageSize = { onAction(BookAction.SetPageSize(it)) },
+                )
             }
             if (chapters.isEmpty()) {
                 item(key = "empty") {
@@ -214,13 +248,64 @@ private fun BookContent(
 }
 
 @Composable
-private fun BookHeader(book: Book, onPageSize: (PageSize) -> Unit) {
+private fun BookHeader(
+    book: Book,
+    coverFile: File?,
+    coverImporting: Boolean,
+    onPickCover: () -> Unit,
+    onRemoveCover: () -> Unit,
+    onPageSize: (PageSize) -> Unit,
+) {
+    var coverMenuOpen by remember { mutableStateOf(false) }
     Column {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BookCover(title = book.title, color = book.coverColor, width = 64.dp)
+            Box {
+                val coverLabel = stringResource(if (coverFile == null) R.string.book_cover_add else R.string.book_cover_change)
+                BookCover(
+                    title = book.title,
+                    color = book.coverColor,
+                    file = coverFile,
+                    width = 64.dp,
+                    modifier = Modifier.clickable(enabled = !coverImporting, onClickLabel = coverLabel) {
+                        // Without a cover there is nothing to choose between: go straight to the picker.
+                        if (coverFile == null) onPickCover() else coverMenuOpen = true
+                    },
+                ) {
+                    when {
+                        coverImporting -> CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                        coverFile == null -> Icon(
+                            Icons.Outlined.Image,
+                            contentDescription = coverLabel,
+                            tint = Color.White,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(4.dp)
+                                .size(18.dp),
+                        )
+                    }
+                }
+                DropdownMenu(expanded = coverMenuOpen, onDismissRequest = { coverMenuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.book_cover_change)) },
+                        leadingIcon = { Icon(Icons.Outlined.Image, contentDescription = null) },
+                        onClick = {
+                            coverMenuOpen = false
+                            onPickCover()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.book_cover_remove)) },
+                        leadingIcon = { Icon(Icons.Outlined.HideImage, contentDescription = null) },
+                        onClick = {
+                            coverMenuOpen = false
+                            onRemoveCover()
+                        },
+                    )
+                }
+            }
             Spacer(Modifier.width(16.dp))
             Column {
                 Text(book.title, style = MaterialTheme.typography.headlineSmall)

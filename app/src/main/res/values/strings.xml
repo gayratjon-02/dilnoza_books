@@ -12,4 +12,8 @@
     <string name="action_move_down">Move down</string>
     <string name="action_back">Back</string>
     <string name="action_more">More options</string>
+    <string name="book_cover_add">Add a cover picture</string>
+    <string name="book_cover_change">Change cover picture</string>
+    <string name="book_cover_remove">Remove cover picture</string>
+    <string name="book_cover_failed">Couldn’t use this picture as the cover</string>
 </resources>
