@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Dilnoza Books</string>
+
+    <string name="library_title">My books</string>
+    <string name="library_empty_title">No books yet</string>
+    <string name="library_empty_body">Start writing your first book</string>
+</resources>
