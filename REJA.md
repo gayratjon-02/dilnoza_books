@@ -58,6 +58,13 @@
 - Bob ichida qidirish va almashtirish (find & replace)
 - So'zlar va belgilar soni
 
+### 2.4.1 Varaqlar (print layout)
+- Muharrir bobni **haqiqiy varaqlar** koʻrinishida koʻrsatadi: varaqning oʻlchami qatʼiy (kitob sozlamasida A5, A4 yoki Letter), varaqlar orasida aniq oraliq bor va har varaq ostida sahifa raqami turadi
+- Varaq toʻlsa, matn **avtomatik** keyingi varaqqa oqadi; matn oʻchirilsa, orqaga qaytadi. Paragraf satr chegarasidan boʻlinadi va varaqning yuqorisida ham, pastida ham kamida 2 satr qoladi. Rasm, jadval va ajratgich boʻlinmaydi. Sarlavha keyingi matndan ajralmaydi
+- Bob oxirida **"+ Yangi varaq"** tugmasi bor. U sahifa uzilishi qoʻyadi va kursorni yangi varaqqa olib oʻtadi
+- Sahifa raqamlari **butun kitob boʻylab** davom etadi; boblar roʻyxatida har bob egallagan betlar koʻrsatiladi (masalan, "4–5-betlar")
+- **Har qanday ekranda bir xil koʻrinish**: varaq nuqtalarda (pt) joylanadi va ekranga masshtablanadi, matn ilova ichiga joylangan Noto Serif shriftida chiziladi. Shuning uchun satrlar har qanday telefonda aynan bir xil joydan uziladi (720×1280 va 1080×2400 ekranlarda tekshirilgan). PDF eksport ham shu dvigateldan foydalanadi
+
 ### 2.5 Avtosaqlash
 - Har bir o'zgarish **~500 ms** tanaffusdan so'ng (debounce) bazaga yoziladi
 - Ilova fonga o'tganda (`onStop`), bob almashtirilganda va ekrandan chiqilganda darhol saqlanadi
