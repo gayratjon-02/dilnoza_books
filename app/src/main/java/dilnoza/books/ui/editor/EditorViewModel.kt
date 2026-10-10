@@ -39,11 +39,13 @@ import dilnoza.books.editor.search.SearchMatch
 import dilnoza.books.editor.search.TextSearch
 import dilnoza.books.editor.richtext.plus
 import dilnoza.books.editor.richtext.subText
+import dilnoza.books.ui.editor.page.BookPageCounter
 import dilnoza.books.ui.navigation.EditorRoute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -64,6 +66,7 @@ class EditorViewModel @Inject constructor(
     private val chapterRepository: ChapterRepository,
     private val blockRepository: BlockRepository,
     private val bookRepository: BookRepository,
+    private val pageCounter: BookPageCounter,
     private val imageStore: ImageStore,
     @ApplicationScope private val appScope: CoroutineScope,
 ) : ViewModel() {
@@ -188,7 +191,11 @@ class EditorViewModel @Inject constructor(
         bookId = chapter.bookId
         viewModelScope.launch {
             bookRepository.observeBook(chapter.bookId).filterNotNull().collect { book ->
-                pageSpec = PageSpec.of(book.pageSize, book.marginMm)
+                val spec = PageSpec.of(book.pageSize, book.marginMm)
+                pageSpec = spec
+                // Pages are numbered across the book: this chapter starts after all earlier ones.
+                val earlier = chapterRepository.observeChapters(chapter.bookId).first().takeWhile { it.id != chapterId }
+                firstPageNumber = 1 + pageCounter.pageCounts(earlier, spec).sum()
             }
         }
         title = TextFieldValue(chapter.title)
