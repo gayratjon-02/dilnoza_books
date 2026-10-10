@@ -1,5 +1,6 @@
 package dilnoza.books.ui.editor
 
+import android.os.ParcelFileDescriptor
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -13,7 +14,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dilnoza.books.core.di.ApplicationScope
+import dilnoza.books.data.files.ImageStore
+import dilnoza.books.domain.model.BlockContent
 import dilnoza.books.domain.model.POSITION_STEP
+import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.domain.repository.BlockRepository
 import dilnoza.books.domain.repository.ChapterRepository
 import dilnoza.books.editor.autosave.AutoSaver
@@ -24,17 +28,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 
 data class FocusRequest(val blockId: String, val token: Long = System.nanoTime())
+
+enum class EditorMessage { IMAGE_FAILED }
 
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val chapterRepository: ChapterRepository,
     private val blockRepository: BlockRepository,
-    @ApplicationScope appScope: CoroutineScope,
+    private val imageStore: ImageStore,
+    @ApplicationScope private val appScope: CoroutineScope,
 ) : ViewModel() {
 
     private val chapterId = savedStateHandle.toRoute<EditorRoute>().chapterId
@@ -48,6 +56,9 @@ class EditorViewModel @Inject constructor(
     val blocks = mutableStateListOf<EditorBlock>()
     var focusRequest by mutableStateOf<FocusRequest?>(null)
         private set
+    var message by mutableStateOf<EditorMessage?>(null)
+        private set
+    private var bookId: String? = null
     private var focusedBlockId by mutableStateOf<String?>(null)
 
     val wordCount by derivedStateOf { blocks.sumOf { countWords(it.value.text) } }
@@ -72,6 +83,7 @@ class EditorViewModel @Inject constructor(
             missing = true
             return
         }
+        bookId = chapter.bookId
         title = TextFieldValue(chapter.title)
         blocks.addAll(blockRepository.getBlocks(chapterId).map(EditorBlock::from))
         if (blocks.isEmpty()) {
@@ -122,7 +134,7 @@ class EditorViewModel @Inject constructor(
     }
 
     fun toggleFocusedKind() {
-        val block = focusedBlock ?: return
+        val block = focusedBlock?.takeIf { it.kind != BlockKind.IMAGE } ?: return
         block.kind = if (block.kind == BlockKind.HEADING) BlockKind.PARAGRAPH else BlockKind.HEADING
         if (block.kind == BlockKind.HEADING && block.value.text.contains('\n')) {
             block.value = block.value.copy(text = block.value.text.replace('\n', ' '))
@@ -154,6 +166,75 @@ class EditorViewModel @Inject constructor(
         val last = blocks.lastOrNull() ?: return
         last.value = last.value.copy(selection = TextRange(last.value.text.length))
         focusRequest = FocusRequest(last.id)
+    }
+
+    fun imageFile(fileName: String): File? = bookId?.let { imageStore.imageFile(it, fileName) }
+
+    /** Index right after the focused block, or the end of the chapter when nothing is focused. */
+    fun insertionIndex(): Int =
+        blocks.indexOfFirst { it.id == focusedBlockId }.takeIf { it >= 0 }?.plus(1) ?: blocks.size
+
+    /**
+     * Inserts placeholders immediately and imports the pictures in the background.
+     * Descriptors are opened by the caller while it still holds read access to the content.
+     */
+    fun insertImages(sources: List<ParcelFileDescriptor>, index: Int = insertionIndex()) {
+        val book = bookId
+        if (book == null || sources.isEmpty()) {
+            sources.forEach { runCatching { it.close() } }
+            return
+        }
+        val placeholders = sources.map {
+            EditorBlock(UUID.randomUUID().toString(), BlockKind.IMAGE, TextFieldValue(), image = ImageState.Pending)
+        }
+        blocks.addAll(index.coerceIn(0, blocks.size), placeholders)
+        focusedBlockId = placeholders.last().id
+
+        // Application scope: the import must finish and be saved even if the user leaves the screen.
+        placeholders.zip(sources).forEach { (block, source) ->
+            appScope.launch {
+                val stored = runCatching { imageStore.import(book, source) }
+                withContext(Dispatchers.Main.immediate) {
+                    stored.onSuccess { image ->
+                        block.image = ImageState(image.fileName, image.width, image.height)
+                        markStructureDirty()
+                    }.onFailure {
+                        blocks.remove(block)
+                        message = EditorMessage.IMAGE_FAILED
+                    }
+                }
+            }
+        }
+    }
+
+    fun selectBlock(id: String) {
+        focusedBlockId = id
+    }
+
+    fun setImageWidth(block: EditorBlock, percent: Int) {
+        val image = block.image ?: return
+        val clamped = percent.coerceIn(BlockContent.Image.MIN_WIDTH_PERCENT, BlockContent.Image.MAX_WIDTH_PERCENT)
+        if (clamped == image.widthPercent) return
+        block.image = image.copy(widthPercent = clamped)
+        markDirty(block.id)
+    }
+
+    fun setImageAlign(block: EditorBlock, align: TextAlignment) {
+        val image = block.image ?: return
+        block.image = image.copy(align = align)
+        markDirty(block.id)
+    }
+
+    fun moveFocusedBlock(offset: Int) {
+        val index = blocks.indexOfFirst { it.id == focusedBlockId }
+        val target = index + offset
+        if (index < 0 || target !in blocks.indices) return
+        blocks.add(target, blocks.removeAt(index))
+        markStructureDirty()
+    }
+
+    fun onMessageShown() {
+        message = null
     }
 
     fun flush() {
@@ -201,7 +282,11 @@ class EditorViewModel @Inject constructor(
         // Snapshot state is mutated on the main thread; read it there for a consistent view.
         val (upserts, titleText) = withContext(Dispatchers.Main.immediate) {
             blocks.mapIndexedNotNull { index, block ->
-                if (block.id in ids) block.toBlock(chapterId, (index + 1) * POSITION_STEP) else null
+                if (block.id in ids && !block.isPendingImage) {
+                    block.toBlock(chapterId, (index + 1) * POSITION_STEP)
+                } else {
+                    null
+                }
             } to title.text
         }
         try {
