@@ -31,6 +31,9 @@ interface BookDao {
     @Query("UPDATE books SET title = :title, author = :author, updated_at = :updatedAt WHERE id = :id")
     suspend fun updateInfo(id: String, title: String, author: String, updatedAt: Long)
 
+    @Query("UPDATE books SET page_size = :pageSize, updated_at = :updatedAt WHERE id = :id")
+    suspend fun updatePageSize(id: String, pageSize: String, updatedAt: Long)
+
     @Query("UPDATE books SET updated_at = :updatedAt WHERE id = :id")
     suspend fun touch(id: String, updatedAt: Long)
 

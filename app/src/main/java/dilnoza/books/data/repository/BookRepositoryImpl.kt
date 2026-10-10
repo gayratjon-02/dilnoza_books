@@ -73,6 +73,10 @@ class BookRepositoryImpl @Inject constructor(
         bookDao.updateInfo(id, title.trim(), author.trim(), clock.now())
     }
 
+    override suspend fun updatePageSize(id: String, pageSize: PageSize) {
+        bookDao.updatePageSize(id, pageSize.name, clock.now())
+    }
+
     override suspend fun deleteBook(id: String) {
         bookDao.delete(id)
         imageStore.deleteBook(id)
