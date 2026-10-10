@@ -410,7 +410,7 @@ private fun EditorToolbar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onToggleKind, enabled = focusedKind != null) {
+                IconButton(onClick = onToggleKind, enabled = focusedKind?.isText == true) {
                     Icon(
                         Icons.Outlined.TextFields,
                         contentDescription = stringResource(

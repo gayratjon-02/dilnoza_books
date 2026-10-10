@@ -34,6 +34,33 @@ class EditorBlockTest {
     fun `heading keeps spans`() = roundTrip(BlockContent.Heading(1, styled))
 
     @Test
+    fun `heading keeps level and alignment`() = roundTrip(BlockContent.Heading(3, styled, TextAlignment.CENTER))
+
+    @Test
+    fun `bullet item keeps indent`() = roundTrip(BlockContent.ListItem(ordered = false, indent = 1, text = styled))
+
+    @Test
+    fun `numbered item keeps indent and alignment`() =
+        roundTrip(BlockContent.ListItem(ordered = true, indent = 2, text = styled, align = TextAlignment.END))
+
+    @Test
+    fun `quote keeps spans`() = roundTrip(BlockContent.Quote(styled, TextAlignment.CENTER))
+
+    @Test
+    fun `divider and page break round trip`() {
+        roundTrip(BlockContent.Divider)
+        roundTrip(BlockContent.PageBreak)
+    }
+
+    @Test
+    fun `table keeps cells and header`() = roundTrip(
+        BlockContent.Table(
+            rows = listOf(listOf(RichText("A"), styled), listOf(RichText.Empty, RichText("D"))),
+            headerRow = true,
+        ),
+    )
+
+    @Test
     fun `image keeps caption and layout`() = roundTrip(
         BlockContent.Image("a.jpg", 800, 600, caption = "Izoh", widthPercent = 50, align = TextAlignment.END),
     )

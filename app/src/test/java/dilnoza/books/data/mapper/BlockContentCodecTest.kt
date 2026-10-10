@@ -128,4 +128,70 @@ class BlockContentCodecTest {
             text.spans,
         )
     }
+
+    @Test
+    fun `every block type survives round trip`() {
+        val styled = RichText("Bir ikki", listOf(StyleSpan(4, 8, SpanStyleData(bold = true))))
+        val contents = listOf(
+            BlockContent.Heading(3, styled, TextAlignment.CENTER),
+            BlockContent.Paragraph(styled, TextAlignment.END),
+            BlockContent.ListItem(ordered = false, indent = 0, text = styled),
+            BlockContent.ListItem(ordered = true, indent = 2, text = styled, align = TextAlignment.JUSTIFY),
+            BlockContent.Quote(styled, TextAlignment.CENTER),
+            BlockContent.Divider,
+            BlockContent.PageBreak,
+            BlockContent.Table(
+                rows = listOf(listOf(RichText("Ism"), styled), listOf(RichText.Empty, RichText("Oʻzbek"))),
+                headerRow = true,
+            ),
+            BlockContent.Image("a.jpg", 10, 20),
+        )
+
+        contents.forEach { assertEquals(it, BlockContentCodec.decode(BlockContentCodec.encode(it))) }
+    }
+
+    @Test
+    fun `types are stable`() {
+        assertEquals("list_item", BlockContentCodec.typeOf(BlockContent.ListItem(true, 0, RichText.Empty)))
+        assertEquals("quote", BlockContentCodec.typeOf(BlockContent.Quote(RichText.Empty)))
+        assertEquals("divider", BlockContentCodec.typeOf(BlockContent.Divider))
+        assertEquals("page_break", BlockContentCodec.typeOf(BlockContent.PageBreak))
+        assertEquals("table", BlockContentCodec.typeOf(BlockContent.Table(listOf(listOf(RichText.Empty)))))
+    }
+
+    @Test
+    fun `list indent is clamped`() {
+        val deep = """{"kind":"list_item","ordered":true,"indent":7,"text":{"text":"a"}}"""
+        val negative = """{"kind":"list_item","indent":-1,"text":{"text":"b"},"align":"??"}"""
+
+        assertEquals(BlockContent.ListItem(true, 2, RichText("a")), BlockContentCodec.decode(deep))
+        assertEquals(BlockContent.ListItem(false, 0, RichText("b")), BlockContentCodec.decode(negative))
+    }
+
+    @Test
+    fun `table is made rectangular`() {
+        val ragged = """{"kind":"table","rows":[[{"text":"a"}],[{"text":"b"},{"text":"c"},{"text":"d"}],[]]}"""
+        val empty = """{"kind":"table","rows":[[],[]],"headerRow":true}"""
+        val missing = """{"kind":"table"}"""
+
+        val table = BlockContentCodec.decode(ragged) as BlockContent.Table
+        assertEquals(
+            listOf(
+                listOf(RichText("a"), RichText.Empty, RichText.Empty),
+                listOf(RichText("b"), RichText("c"), RichText("d")),
+                listOf(RichText.Empty, RichText.Empty, RichText.Empty),
+            ),
+            table.rows,
+        )
+        assertFalse(table.headerRow)
+        assertEquals(BlockContent.Table(listOf(listOf(RichText.Empty)), headerRow = true), BlockContentCodec.decode(empty))
+        assertEquals(BlockContent.Table(listOf(listOf(RichText.Empty))), BlockContentCodec.decode(missing))
+    }
+
+    @Test
+    fun `version 1 heading gets start alignment`() {
+        val heading = """{"kind":"heading","v":1,"level":0,"text":{"text":"h"}}"""
+
+        assertEquals(BlockContent.Heading(1, RichText("h"), TextAlignment.START), BlockContentCodec.decode(heading))
+    }
 }

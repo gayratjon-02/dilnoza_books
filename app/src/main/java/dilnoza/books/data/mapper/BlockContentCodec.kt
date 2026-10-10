@@ -26,6 +26,11 @@ object BlockContentCodec {
     fun typeOf(content: BlockContent): String = when (content) {
         is BlockContent.Heading -> TYPE_HEADING
         is BlockContent.Paragraph -> TYPE_PARAGRAPH
+        is BlockContent.ListItem -> TYPE_LIST_ITEM
+        is BlockContent.Quote -> TYPE_QUOTE
+        BlockContent.Divider -> TYPE_DIVIDER
+        BlockContent.PageBreak -> TYPE_PAGE_BREAK
+        is BlockContent.Table -> TYPE_TABLE
         is BlockContent.Image -> TYPE_IMAGE
     }
 
@@ -34,8 +39,21 @@ object BlockContentCodec {
     fun decode(raw: String): BlockContent = json.decodeFromString(BlockContentDto.serializer(), raw).toDomain()
 
     private fun BlockContent.toDto(): BlockContentDto = when (this) {
-        is BlockContent.Heading -> BlockContentDto.Heading(level = level, text = text.toDto())
+        is BlockContent.Heading -> BlockContentDto.Heading(level = level, text = text.toDto(), align = align.name)
         is BlockContent.Paragraph -> BlockContentDto.Paragraph(text = text.toDto(), align = align.name)
+        is BlockContent.ListItem -> BlockContentDto.ListItem(
+            ordered = ordered,
+            indent = indent,
+            text = text.toDto(),
+            align = align.name,
+        )
+        is BlockContent.Quote -> BlockContentDto.Quote(text = text.toDto(), align = align.name)
+        BlockContent.Divider -> BlockContentDto.Divider()
+        BlockContent.PageBreak -> BlockContentDto.PageBreak()
+        is BlockContent.Table -> BlockContentDto.Table(
+            rows = rows.map { row -> row.map { it.toDto() } },
+            headerRow = headerRow,
+        )
         is BlockContent.Image -> BlockContentDto.Image(
             file = fileName,
             width = width,
@@ -47,11 +65,28 @@ object BlockContentCodec {
     }
 
     private fun BlockContentDto.toDomain(): BlockContent = when (this) {
-        is BlockContentDto.Heading -> BlockContent.Heading(level = level.coerceIn(1, 3), text = text.toDomain())
+        is BlockContentDto.Heading -> BlockContent.Heading(
+            level = level.coerceIn(BlockContent.Heading.MIN_LEVEL, BlockContent.Heading.MAX_LEVEL),
+            text = text.toDomain(),
+            align = alignmentOf(align, TextAlignment.START),
+        )
         is BlockContentDto.Paragraph -> BlockContent.Paragraph(
             text = text.toDomain(),
             align = alignmentOf(align, TextAlignment.START),
         )
+        is BlockContentDto.ListItem -> BlockContent.ListItem(
+            ordered = ordered,
+            indent = indent.coerceIn(0, BlockContent.ListItem.MAX_INDENT),
+            text = text.toDomain(),
+            align = alignmentOf(align, TextAlignment.START),
+        )
+        is BlockContentDto.Quote -> BlockContent.Quote(
+            text = text.toDomain(),
+            align = alignmentOf(align, TextAlignment.START),
+        )
+        is BlockContentDto.Divider -> BlockContent.Divider
+        is BlockContentDto.PageBreak -> BlockContent.PageBreak
+        is BlockContentDto.Table -> BlockContent.Table(rows = rectangular(rows), headerRow = headerRow)
         is BlockContentDto.Image -> BlockContent.Image(
             fileName = file,
             width = width.coerceAtLeast(1),
@@ -104,6 +139,13 @@ object BlockContentCodec {
         },
     ).normalized()
 
+    /** Pads short rows with empty cells; a table without cells becomes a single empty cell. */
+    private fun rectangular(rows: List<List<RichTextDto>>): List<List<RichText>> {
+        val width = rows.maxOfOrNull { it.size } ?: 0
+        if (width == 0) return listOf(listOf(RichText.Empty))
+        return rows.map { row -> List(width) { col -> row.getOrNull(col)?.toDomain() ?: RichText.Empty } }
+    }
+
     private fun alignmentOf(name: String, fallback: TextAlignment) =
         TextAlignment.entries.firstOrNull { it.name == name } ?: fallback
 
@@ -112,6 +154,11 @@ object BlockContentCodec {
 
     const val TYPE_HEADING = "heading"
     const val TYPE_PARAGRAPH = "paragraph"
+    const val TYPE_LIST_ITEM = "list_item"
+    const val TYPE_QUOTE = "quote"
+    const val TYPE_DIVIDER = "divider"
+    const val TYPE_PAGE_BREAK = "page_break"
+    const val TYPE_TABLE = "table"
     const val TYPE_IMAGE = "image"
 }
 
@@ -120,11 +167,46 @@ private sealed interface BlockContentDto {
 
     @Serializable
     @SerialName(BlockContentCodec.TYPE_HEADING)
-    data class Heading(val v: Int = 2, val level: Int, val text: RichTextDto) : BlockContentDto
+    data class Heading(
+        val v: Int = 2,
+        val level: Int,
+        val text: RichTextDto,
+        val align: String = "START",
+    ) : BlockContentDto
 
     @Serializable
     @SerialName(BlockContentCodec.TYPE_PARAGRAPH)
     data class Paragraph(val v: Int = 2, val text: RichTextDto, val align: String = "START") : BlockContentDto
+
+    @Serializable
+    @SerialName(BlockContentCodec.TYPE_LIST_ITEM)
+    data class ListItem(
+        val v: Int = 1,
+        val ordered: Boolean = false,
+        val indent: Int = 0,
+        val text: RichTextDto,
+        val align: String = "START",
+    ) : BlockContentDto
+
+    @Serializable
+    @SerialName(BlockContentCodec.TYPE_QUOTE)
+    data class Quote(val v: Int = 1, val text: RichTextDto, val align: String = "START") : BlockContentDto
+
+    @Serializable
+    @SerialName(BlockContentCodec.TYPE_DIVIDER)
+    data class Divider(val v: Int = 1) : BlockContentDto
+
+    @Serializable
+    @SerialName(BlockContentCodec.TYPE_PAGE_BREAK)
+    data class PageBreak(val v: Int = 1) : BlockContentDto
+
+    @Serializable
+    @SerialName(BlockContentCodec.TYPE_TABLE)
+    data class Table(
+        val v: Int = 1,
+        val rows: List<List<RichTextDto>> = emptyList(),
+        val headerRow: Boolean = false,
+    ) : BlockContentDto
 
     @Serializable
     @SerialName(BlockContentCodec.TYPE_IMAGE)

@@ -2,6 +2,7 @@ package dilnoza.books.ui.editor
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
@@ -14,8 +15,25 @@ import dilnoza.books.domain.model.SpanStyleData
 import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.editor.richtext.RichTextEditor
 import dilnoza.books.editor.richtext.normalized
+import dilnoza.books.editor.table.TableGrid
 
-enum class BlockKind { PARAGRAPH, HEADING, IMAGE }
+enum class BlockKind(val isText: Boolean) {
+    PARAGRAPH(true),
+    HEADING(true),
+    BULLET(true),
+    NUMBERED(true),
+    QUOTE(true),
+    DIVIDER(false),
+    PAGE_BREAK(false),
+    TABLE(false),
+    IMAGE(false),
+}
+
+data class TableState(val grid: TableGrid<RichText>, val headerRow: Boolean = false) {
+    companion object {
+        fun of(content: BlockContent.Table) = TableState(TableGrid(content.rows), content.headerRow)
+    }
+}
 
 /** Image part of an image block; [fileName] is null while the picture is still being imported. */
 data class ImageState(
@@ -36,6 +54,7 @@ data class ImageState(
  * Mutable, in-memory block while a chapter is open; the editor's source of truth until it is saved.
  * [rich] holds the styled text and [value] the same text plus the field's selection; [setValue]
  * and [setRich] keep the two in step. For image blocks the text is the caption.
+ * [headingLevel] applies to headings and [indent] to list items; both are kept across kind changes.
  */
 @Stable
 class EditorBlock(
@@ -43,15 +62,24 @@ class EditorBlock(
     kind: BlockKind,
     rich: RichText = RichText.Empty,
     selection: TextRange = TextRange(rich.text.length),
-    val align: TextAlignment = TextAlignment.START,
+    align: TextAlignment = TextAlignment.START,
+    headingLevel: Int = BlockContent.Heading.MIN_LEVEL,
+    indent: Int = 0,
     image: ImageState? = null,
+    table: TableState? = null,
 ) {
     var kind by mutableStateOf(kind)
+    var align by mutableStateOf(align)
+    var headingLevel by mutableIntStateOf(
+        headingLevel.coerceIn(BlockContent.Heading.MIN_LEVEL, BlockContent.Heading.MAX_LEVEL),
+    )
+    var indent by mutableIntStateOf(indent.coerceIn(0, BlockContent.ListItem.MAX_INDENT))
     var rich by mutableStateOf(rich.normalized())
         private set
     var value by mutableStateOf(TextFieldValue(rich.text, selection))
         private set
     var image by mutableStateOf(image)
+    var table by mutableStateOf(table)
     val focusRequester = FocusRequester()
 
     val isPendingImage: Boolean get() = kind == BlockKind.IMAGE && image?.fileName == null
@@ -78,8 +106,17 @@ class EditorBlock(
         chapterId = chapterId,
         position = position,
         content = when (kind) {
-            BlockKind.HEADING -> BlockContent.Heading(level = 1, text = rich)
+            BlockKind.HEADING -> BlockContent.Heading(level = headingLevel, text = rich, align = align)
             BlockKind.PARAGRAPH -> BlockContent.Paragraph(text = rich, align = align)
+            BlockKind.BULLET -> BlockContent.ListItem(ordered = false, indent = indent, text = rich, align = align)
+            BlockKind.NUMBERED -> BlockContent.ListItem(ordered = true, indent = indent, text = rich, align = align)
+            BlockKind.QUOTE -> BlockContent.Quote(text = rich, align = align)
+            BlockKind.DIVIDER -> BlockContent.Divider
+            BlockKind.PAGE_BREAK -> BlockContent.PageBreak
+            BlockKind.TABLE -> {
+                val table = checkNotNull(table)
+                BlockContent.Table(rows = table.grid.rows, headerRow = table.headerRow)
+            }
             BlockKind.IMAGE -> {
                 val image = checkNotNull(image)
                 BlockContent.Image(
@@ -96,8 +133,25 @@ class EditorBlock(
 
     companion object {
         fun from(block: Block): EditorBlock = when (val content = block.content) {
-            is BlockContent.Heading -> EditorBlock(block.id, BlockKind.HEADING, content.text)
+            is BlockContent.Heading -> EditorBlock(
+                id = block.id,
+                kind = BlockKind.HEADING,
+                rich = content.text,
+                align = content.align,
+                headingLevel = content.level,
+            )
             is BlockContent.Paragraph -> EditorBlock(block.id, BlockKind.PARAGRAPH, content.text, align = content.align)
+            is BlockContent.ListItem -> EditorBlock(
+                id = block.id,
+                kind = if (content.ordered) BlockKind.NUMBERED else BlockKind.BULLET,
+                rich = content.text,
+                align = content.align,
+                indent = content.indent,
+            )
+            is BlockContent.Quote -> EditorBlock(block.id, BlockKind.QUOTE, content.text, align = content.align)
+            BlockContent.Divider -> EditorBlock(block.id, BlockKind.DIVIDER)
+            BlockContent.PageBreak -> EditorBlock(block.id, BlockKind.PAGE_BREAK)
+            is BlockContent.Table -> EditorBlock(block.id, BlockKind.TABLE, table = TableState.of(content))
             is BlockContent.Image -> EditorBlock(
                 id = block.id,
                 kind = BlockKind.IMAGE,

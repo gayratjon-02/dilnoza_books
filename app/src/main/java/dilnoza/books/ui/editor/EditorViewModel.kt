@@ -65,7 +65,11 @@ class EditorViewModel @Inject constructor(
     private var bookId: String? = null
     private var focusedBlockId by mutableStateOf<String?>(null)
 
-    val wordCount by derivedStateOf { blocks.sumOf { countWords(it.value.text) } }
+    val wordCount by derivedStateOf {
+        blocks.sumOf { block ->
+            countWords(block.value.text) + (block.table?.grid?.rows?.sumOf { row -> row.sumOf { countWords(it.text) } } ?: 0)
+        }
+    }
     val focusedBlock: EditorBlock? get() = blocks.firstOrNull { it.id == focusedBlockId }
 
     // Guarded by [lock]: what changed since the last successful save.
@@ -138,7 +142,7 @@ class EditorViewModel @Inject constructor(
     }
 
     fun toggleFocusedKind() {
-        val block = focusedBlock?.takeIf { it.kind != BlockKind.IMAGE } ?: return
+        val block = focusedBlock?.takeIf { it.kind.isText } ?: return
         block.kind = if (block.kind == BlockKind.HEADING) BlockKind.PARAGRAPH else BlockKind.HEADING
         if (block.kind == BlockKind.HEADING && block.value.text.contains('\n')) {
             // Same length, so the spans still line up.
@@ -153,6 +157,8 @@ class EditorViewModel @Inject constructor(
         if (blocks.size == 1) {
             block.setRich(RichText.Empty)
             block.kind = BlockKind.PARAGRAPH
+            block.image = null
+            block.table = null
             markDirty(block.id)
             return
         }
@@ -168,7 +174,16 @@ class EditorViewModel @Inject constructor(
     }
 
     fun focusLastBlock() {
-        val last = blocks.lastOrNull() ?: return
+        val last = blocks.lastOrNull()
+        if (last == null || !last.kind.isText) {
+            // Nothing to type into at the end (e.g. a picture): continue in a new paragraph.
+            val block = newBlock(BlockKind.PARAGRAPH)
+            blocks.add(block)
+            focusedBlockId = block.id
+            focusRequest = FocusRequest(block.id)
+            markStructureDirty()
+            return
+        }
         last.setSelection(TextRange(last.value.text.length))
         focusRequest = FocusRequest(last.id)
     }
