@@ -32,8 +32,9 @@ class PageSpecTest {
         val spec = PageSpec.of(PageSize.A5, marginMm = 20)
 
         assertEquals(56.69f, spec.marginPt, delta)
-        assertEquals(419.53f - 2 * 56.69f, spec.contentWidthPt, delta)
-        assertEquals(595.28f - 2 * 56.69f, spec.contentHeightPt, delta)
+        assertEquals(spec.widthPt - 2 * spec.marginPt, spec.contentWidthPt, delta)
+        assertEquals(306.14f, spec.contentWidthPt, delta)
+        assertEquals(481.89f, spec.contentHeightPt, delta)
     }
 
     @Test
