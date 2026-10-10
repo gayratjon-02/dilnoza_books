@@ -515,8 +515,20 @@ class EditorViewModel @Inject constructor(
         val target = index + offset
         if (index < 0 || target !in blocks.indices) return
         history.record(historyEntry())
-        blocks.add(target, blocks.removeAt(index))
+        val block = blocks.removeAt(index)
+        blocks.add(target, block)
         markStructureDirty()
+        // The caret stays in the moved block, and the block is scrolled into view if it left it.
+        when {
+            block.kind.isText -> focusRequest = FocusRequest(block.id)
+            block.kind == BlockKind.TABLE && focusedCell != null -> focusRequest = FocusRequest(block.id, focusedCell)
+        }
+    }
+
+    /** Whether the focused block can move by [offset] places. */
+    fun canMoveFocused(offset: Int): Boolean {
+        val index = blocks.indexOfFirst { it.id == focusedBlockId }
+        return index >= 0 && index + offset in blocks.indices
     }
 
     fun undo() {

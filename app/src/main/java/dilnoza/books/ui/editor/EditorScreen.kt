@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -145,6 +146,7 @@ fun EditorScreen(
     val resolver = LocalContext.current.contentResolver
     val activity = LocalActivity.current
     val focusManager = LocalFocusManager.current
+    val density = LocalDensity.current
     val snackbarHostState = remember { SnackbarHostState() }
     var listTopInRoot by remember { mutableFloatStateOf(0f) }
     var listBottomInRoot by remember { mutableFloatStateOf(0f) }
@@ -233,6 +235,19 @@ fun EditorScreen(
                 } else {
                     listState.scrollToItem(item)
                 }
+            }
+            // A block that kept its focus but moved (or came back with undo) may sit outside the view.
+            withFrameNanos { }
+            val item = viewModel.blocks.indexOf(target) + 1
+            val info = listState.layoutInfo
+            val shown = info.visibleItemsInfo.firstOrNull { it.index == item }
+            val minVisible = with(density) { MIN_VISIBLE_BLOCK.toPx() }
+            when {
+                item == 0 -> Unit
+                shown == null -> listState.scrollToItem(item)
+                shown.offset + minVisible > info.viewportEndOffset ->
+                    listState.animateScrollBy((shown.offset + minOf(shown.size, info.viewportEndOffset / 2) - info.viewportEndOffset).toFloat())
+                shown.offset + shown.size < info.viewportStartOffset + minVisible -> listState.animateScrollToItem(item)
             }
         }
         viewModel.onFocusRequestHandled()
@@ -418,6 +433,9 @@ fun EditorScreen(
                         },
                         onAddTable = { pickTableSize = true },
                         onDelete = viewModel::deleteFocusedBlock,
+                        canMoveUp = viewModel.canMoveFocused(-1),
+                        canMoveDown = viewModel.canMoveFocused(1),
+                        onMove = viewModel::moveFocusedBlock,
                     )
                 }
             }
@@ -696,6 +714,9 @@ private fun EditorToolbar(
     onAddImage: () -> Unit,
     onAddTable: () -> Unit,
     onDelete: () -> Unit,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMove: (Int) -> Unit,
 ) {
     Surface(tonalElevation = 2.dp) {
         Row(
@@ -713,6 +734,12 @@ private fun EditorToolbar(
             ) {
                 IconButton(onClick = onDelete, enabled = focusedKind != null) {
                     Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.editor_delete_block))
+                }
+                IconButton(onClick = { onMove(-1) }, enabled = canMoveUp) {
+                    Icon(Icons.Outlined.ArrowUpward, contentDescription = stringResource(R.string.editor_move_block_up))
+                }
+                IconButton(onClick = { onMove(1) }, enabled = canMoveDown) {
+                    Icon(Icons.Outlined.ArrowDownward, contentDescription = stringResource(R.string.editor_move_block_down))
                 }
                 AssistChip(
                     onClick = onAddParagraph,
@@ -813,10 +840,10 @@ private fun ImageToolbar(
                 )
             }
             IconButton(onClick = { onMove(-1) }) {
-                Icon(Icons.Outlined.ArrowUpward, contentDescription = stringResource(R.string.action_move_up))
+                Icon(Icons.Outlined.ArrowUpward, contentDescription = stringResource(R.string.editor_move_block_up))
             }
             IconButton(onClick = { onMove(1) }) {
-                Icon(Icons.Outlined.ArrowDownward, contentDescription = stringResource(R.string.action_move_down))
+                Icon(Icons.Outlined.ArrowDownward, contentDescription = stringResource(R.string.editor_move_block_down))
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.editor_delete_block))
@@ -853,6 +880,7 @@ private fun dropIndex(listState: LazyListState, viewModel: EditorViewModel, y: F
 
 private const val MAX_PICKED_IMAGES = 10
 private const val MAX_FOCUS_FRAMES = 6
+private val MIN_VISIBLE_BLOCK = 48.dp
 private val MENU_GAP = 4.dp
 private val MENU_ITEM_HEIGHT = 48.dp
 private val MENU_KEYS = setOf(Key.DirectionDown, Key.DirectionUp, Key.Enter, Key.NumPadEnter, Key.Escape)

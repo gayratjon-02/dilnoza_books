@@ -51,4 +51,6 @@
     <string name="table_size">Размер таблицы: %1$d × %2$d</string>
     <string name="editor_undo">Отменить</string>
     <string name="editor_redo">Повторить</string>
+    <string name="editor_move_block_up">Переместить блок вверх</string>
+    <string name="editor_move_block_down">Переместить блок вниз</string>
 </resources>
