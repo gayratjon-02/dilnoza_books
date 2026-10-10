@@ -110,3 +110,55 @@ private fun List<StyleSpan>.flatten(): List<StyleSpan> {
     }
     return out
 }
+
+/** Rewrites the style of every character in `[start, end)`, splitting runs at the range edges. */
+fun RichText.applyStyle(start: Int, end: Int, transform: (SpanStyleData) -> SpanStyleData): RichText {
+    val base = normalized()
+    val (from, to) = base.text.styleRange(start, end)
+    if (from >= to) return base
+    val out = ArrayList<StyleSpan>(base.spans.size + 2)
+    var covered = from
+    fun fillGapUntil(position: Int) {
+        if (covered < position) out += StyleSpan(covered, position, transform(SpanStyleData.Default))
+        covered = maxOf(covered, position)
+    }
+    for (run in base.spans) {
+        when {
+            run.end <= from -> out += run
+            run.start >= to -> {
+                fillGapUntil(to)
+                out += run
+            }
+            else -> {
+                if (run.start < from) out += StyleSpan(run.start, from, run.style)
+                val innerStart = maxOf(run.start, from)
+                val innerEnd = minOf(run.end, to)
+                fillGapUntil(innerStart)
+                out += StyleSpan(innerStart, innerEnd, transform(run.style))
+                covered = innerEnd
+                if (run.end > to) out += StyleSpan(to, run.end, run.style)
+            }
+        }
+    }
+    fillGapUntil(to)
+    return RichText(base.text, compact(out))
+}
+
+/** Removes [attribute] when the whole range already has it, otherwise sets it on the whole range. */
+fun RichText.toggle(start: Int, end: Int, attribute: StyleAttribute): RichText {
+    val enable = !isApplied(start, end, attribute)
+    return applyStyle(start, end) { it.with(attribute, enable) }
+}
+
+fun RichText.setColor(start: Int, end: Int, value: Int?): RichText = applyStyle(start, end) { it.copy(color = value) }
+
+fun RichText.setBackground(start: Int, end: Int, value: Int?): RichText =
+    applyStyle(start, end) { it.copy(background = value) }
+
+fun RichText.setFontSize(start: Int, end: Int, value: Int?): RichText =
+    applyStyle(start, end) { it.copy(fontSizeSp = value) }
+
+fun RichText.setFontFamily(start: Int, end: Int, value: String?): RichText =
+    applyStyle(start, end) { it.copy(fontFamily = value) }
+
+fun RichText.clearFormatting(start: Int, end: Int): RichText = applyStyle(start, end) { SpanStyleData.Default }
