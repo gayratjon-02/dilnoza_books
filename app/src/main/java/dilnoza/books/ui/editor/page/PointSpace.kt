@@ -6,7 +6,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.Layout
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import dilnoza.books.editor.layout.PageMeasurer
@@ -70,7 +73,20 @@ fun ScreenDensity(content: @Composable () -> Unit) {
 fun NormalSize(content: @Composable () -> Unit) {
     val screen = LocalScreenDensity.current ?: LocalDensity.current
     val scale = LocalPageScale.current
-    CompositionLocalProvider(LocalDensity provides Density(screen.density / scale, screen.fontScale), content = content)
+    val viewConfiguration = LocalViewConfiguration.current
+    // Pointer positions here are in page points too, so the touch slop is scaled to stay the same on screen.
+    val scaledConfiguration = remember(viewConfiguration, scale) {
+        if (scale == 1f) viewConfiguration else ScaledViewConfiguration(viewConfiguration, scale)
+    }
+    CompositionLocalProvider(
+        LocalDensity provides Density(screen.density / scale, screen.fontScale),
+        LocalViewConfiguration provides scaledConfiguration,
+        content = content,
+    )
+}
+
+private class ScaledViewConfiguration(private val base: ViewConfiguration, private val scale: Float) : ViewConfiguration by base {
+    override val touchSlop: Float get() = base.touchSlop / scale
 }
 
 private fun Constraints.unscaled(scale: Float): Constraints {

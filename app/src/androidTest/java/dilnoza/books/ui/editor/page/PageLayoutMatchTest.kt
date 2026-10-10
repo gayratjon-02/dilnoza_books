@@ -21,7 +21,10 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.platform.LocalDensity
+import dilnoza.books.R
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
@@ -217,6 +220,38 @@ class PageLayoutMatchTest {
     /** Any visibly dark pixel: strokes of a 9 px digit are thin and mostly anti-aliased grey. */
     private fun isInk(pixel: Int): Boolean =
         android.graphics.Color.red(pixel) < 200 && android.graphics.Color.green(pixel) < 200 && android.graphics.Color.blue(pixel) < 200
+
+    @Test
+    fun imageResizeHandleKeepsItsScreenSizeOnAScaledPage() {
+        val spec = PageSpec.of(PageSize.A4, 20)
+        var screenDensity = 0f
+        for (scale in listOf(0.8f, 1.5f, 3f)) {
+            rule.runOnIdle {
+                screen = {
+                    screenDensity = LocalDensity.current.density
+                    PointSpace(scale = scale) {
+                        Slice(spec, heightPt = 700f) {
+                            ImageBlockView(
+                                block = EditorBlock("i", BlockKind.IMAGE, image = ImageState("picture.png", 400, 300, widthPercent = 50)),
+                                file = null,
+                                selected = true,
+                                onSelect = {},
+                                onResize = {},
+                                onCaptionChange = {},
+                                onCaptionFocused = {},
+                            )
+                        }
+                    }
+                }
+            }
+            rule.waitForIdle()
+            val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.editor_image_resize)
+            val handle = rule.onNodeWithContentDescription(label, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            // The handle is 32dp across; its 18dp icon is what carries the description.
+            val expected = 18 * screenDensity
+            assertEquals("resize handle icon at page scale $scale", expected, handle.width, 2f)
+        }
+    }
 
     @Test
     fun tableTallerThanAPageIsDrawnShrunkInsideItsSlot() {

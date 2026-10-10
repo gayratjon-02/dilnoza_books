@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -49,6 +50,7 @@ import coil3.compose.AsyncImage
 import dilnoza.books.R
 import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.editor.layout.PageStyles
+import dilnoza.books.ui.editor.page.NormalSize
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -83,6 +85,8 @@ fun ImageBlockView(
                     .aspectRatio(image.aspectRatio),
             ) {
                 val shape = RoundedCornerShape(6.dp)
+                // The same corners for the selection border, which is drawn at screen size.
+                val borderShape = RoundedCornerShape(CornerSize(with(LocalDensity.current) { 6.dp.toPx() }))
                 if (image.fileName == null || file == null) {
                     Box(
                         modifier = Modifier
@@ -91,7 +95,7 @@ fun ImageBlockView(
                             .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                        NormalSize { CircularProgressIndicator(modifier = Modifier.size(32.dp)) }
                     }
                 } else {
                     AsyncImage(
@@ -109,11 +113,14 @@ fun ImageBlockView(
                     )
                 }
                 if (selected && image.fileName != null) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .border(2.dp, MaterialTheme.colorScheme.primary, shape),
-                    )
+                    // Selection chrome over the page keeps its normal size, however far the page is scaled.
+                    NormalSize {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .border(2.dp, MaterialTheme.colorScheme.primary, borderShape),
+                        )
+                    }
                     ResizeHandle(
                         align = image.align,
                         widthPercent = image.widthPercent,
@@ -145,6 +152,20 @@ private fun ResizeHandle(
     fullWidthPx: Float,
     onResize: (Int) -> Unit,
     modifier: Modifier = Modifier,
+) {
+    // A normal-sized touch target: inside the page, dp would be points scaled with the page.
+    NormalSize {
+        ResizeHandleBody(align, widthPercent, fullWidthPx, onResize, modifier)
+    }
+}
+
+@Composable
+private fun ResizeHandleBody(
+    align: TextAlignment,
+    widthPercent: Int,
+    fullWidthPx: Float,
+    onResize: (Int) -> Unit,
+    modifier: Modifier,
 ) {
     val currentPercent by rememberUpdatedState(widthPercent)
     val currentOnResize by rememberUpdatedState(onResize)
