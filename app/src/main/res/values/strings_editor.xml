@@ -11,6 +11,15 @@
     <string name="save_status_saved">Saved</string>
     <string name="save_status_saving">Saving…</string>
     <string name="save_status_error">Not saved</string>
+    <string name="editor_add_image">Image</string>
+    <string name="editor_image_caption_hint">Image caption</string>
+    <string name="editor_image_failed">Couldn’t add the image</string>
+    <string name="editor_image_resize">Resize image</string>
+    <string name="editor_image_done">Done</string>
+    <string name="editor_image_width" translatable="false">%1$d%%</string>
+    <string name="editor_align_start">Align left</string>
+    <string name="editor_align_center">Align center</string>
+    <string name="editor_align_end">Align right</string>
     <plurals name="editor_word_count">
         <item quantity="one">%d word</item>
         <item quantity="other">%d words</item>

@@ -11,6 +11,14 @@
     <string name="save_status_saved">Сохранено</string>
     <string name="save_status_saving">Сохранение…</string>
     <string name="save_status_error">Не сохранено</string>
+    <string name="editor_add_image">Изображение</string>
+    <string name="editor_image_caption_hint">Подпись к изображению</string>
+    <string name="editor_image_failed">Не удалось добавить изображение</string>
+    <string name="editor_image_resize">Изменить размер</string>
+    <string name="editor_image_done">Готово</string>
+    <string name="editor_align_start">По левому краю</string>
+    <string name="editor_align_center">По центру</string>
+    <string name="editor_align_end">По правому краю</string>
     <plurals name="editor_word_count">
         <item quantity="one">%d слово</item>
         <item quantity="few">%d слова</item>

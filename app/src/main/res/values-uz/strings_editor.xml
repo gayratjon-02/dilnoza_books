@@ -11,6 +11,14 @@
     <string name="save_status_saved">Saqlandi</string>
     <string name="save_status_saving">Saqlanmoqda…</string>
     <string name="save_status_error">Saqlanmadi</string>
+    <string name="editor_add_image">Rasm</string>
+    <string name="editor_image_caption_hint">Rasm izohi</string>
+    <string name="editor_image_failed">Rasmni qoʻshib boʻlmadi</string>
+    <string name="editor_image_resize">Rasm oʻlchamini oʻzgartirish</string>
+    <string name="editor_image_done">Tayyor</string>
+    <string name="editor_align_start">Chapga</string>
+    <string name="editor_align_center">Markazga</string>
+    <string name="editor_align_end">Oʻngga</string>
     <plurals name="editor_word_count">
         <item quantity="one">%d ta soʻz</item>
         <item quantity="other">%d ta soʻz</item>
