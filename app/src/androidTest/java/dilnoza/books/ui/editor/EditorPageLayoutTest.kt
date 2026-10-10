@@ -2,7 +2,9 @@ package dilnoza.books.ui.editor
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
@@ -14,6 +16,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dilnoza.books.MainActivity
 import dilnoza.books.R
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -77,6 +80,35 @@ class EditorPageLayoutTest {
         assertTrue("table ($tableTop..$tableBottom) must fit a page ($pageHeight px)", tableBottom - tableTop < pageHeight * 0.85f)
     }
 
+    @Test
+    fun wideListNumbersStayOnOneLineNextToTheirItem() {
+        robot.tapField(robot.blockFields().first())
+        robot.type("1. Bir")
+        for (item in 2..ITEMS) {
+            robot.pressEnter()
+            robot.type("Band")
+        }
+        robot.hideKeyboard()
+        robot.waitFor { robot.nodes(hasText("$ITEMS.")).isNotEmpty() }
+        robot.screenshot("list_labels")
+
+        for (number in listOf(9, 10, 11, 12)) {
+            val label = robot.nodes(hasText("$number.")).single()
+            val layouts = mutableListOf<TextLayoutResult>()
+            label.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+            val layout = layouts.single()
+            assertEquals("label $number. must be one line", 1, layout.lineCount)
+            assertEquals("label $number. must be shown whole", "$number.".length, layout.getLineEnd(0, visibleEnd = true))
+            // Its text starts after the label: the label ends before the item's text field.
+            val fields = robot.blockFields()
+            val field = fields[number - 1].boundsInRoot
+            val labelBounds = label.boundsInRoot
+            assertTrue("label $number. ($labelBounds) must sit on its item's first line ($field)",
+                labelBounds.top >= field.top - 1f && labelBounds.bottom <= field.bottom + 1f)
+            assertTrue("label $number. ($labelBounds) must end before its text ($field)", labelBounds.right <= field.left + 1f)
+        }
+    }
+
     /** Cells of [column] (1-based), as row number to bounds in the root, ordered by row. */
     private fun cellsOfColumn(column: Int) = robot.nodes(CELL, unmerged = true).mapNotNull { node ->
         val label = node.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull() ?: return@mapNotNull null
@@ -91,6 +123,7 @@ class EditorPageLayoutTest {
     }.sortedBy { it.first }
 
     private companion object {
+        const val ITEMS = 12
         const val MAX_ROWS = 20
         const val EXTRA_ROWS = 2
         // "%1$d-qator, %2$d-ustun" and its English and Russian forms: the two numbers in order.

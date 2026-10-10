@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -701,13 +702,18 @@ private fun BlockField(
             ),
     ) {
         if (listLabel != null) {
+            // Always one line, ending at the gap before the text: a wide label ("10.", "viii.") reaches
+            // into the margin as in print instead of wrapping and being cut to the planned line height.
             Text(
                 text = listLabel,
                 style = style.copy(textAlign = TextAlign.End),
+                softWrap = false,
+                maxLines = 1,
                 modifier = Modifier
                     .padding(start = (PageStyles.LIST_INDENT_PT * block.indent).dp)
                     .width(PageStyles.LIST_LABEL_WIDTH_PT.dp)
-                    .padding(end = LIST_LABEL_GAP_PT.dp),
+                    .padding(end = LIST_LABEL_GAP_PT.dp)
+                    .wrapContentWidth(Alignment.End, unbounded = true),
             )
         }
         BasicTextField(
