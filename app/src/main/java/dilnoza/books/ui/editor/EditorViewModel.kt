@@ -19,10 +19,12 @@ import dilnoza.books.core.di.ApplicationScope
 import dilnoza.books.data.files.ImageStore
 import dilnoza.books.domain.model.Block
 import dilnoza.books.domain.model.BlockContent
+import dilnoza.books.domain.model.PageSize
 import dilnoza.books.domain.model.RichText
 import dilnoza.books.domain.model.SpanStyleData
 import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.domain.repository.BlockRepository
+import dilnoza.books.domain.repository.BookRepository
 import dilnoza.books.domain.repository.ChapterRepository
 import dilnoza.books.editor.autosave.AutoSaver
 import dilnoza.books.editor.autosave.SaveStatus
@@ -32,6 +34,7 @@ import dilnoza.books.editor.commands.ListNumbering
 import dilnoza.books.editor.commands.SlashCommands
 import dilnoza.books.editor.commands.SlashQuery
 import dilnoza.books.editor.history.UndoManager
+import dilnoza.books.editor.layout.PageSpec
 import dilnoza.books.editor.search.SearchMatch
 import dilnoza.books.editor.search.TextSearch
 import dilnoza.books.editor.richtext.plus
@@ -40,6 +43,7 @@ import dilnoza.books.ui.navigation.EditorRoute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -59,6 +63,7 @@ class EditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val chapterRepository: ChapterRepository,
     private val blockRepository: BlockRepository,
+    private val bookRepository: BookRepository,
     private val imageStore: ImageStore,
     @ApplicationScope private val appScope: CoroutineScope,
 ) : ViewModel() {
@@ -70,6 +75,12 @@ class EditorViewModel @Inject constructor(
     var missing by mutableStateOf(false)
         private set
     var title by mutableStateOf(TextFieldValue())
+        private set
+    var pageSpec by mutableStateOf(PageSpec.of(PageSize.A5, DEFAULT_MARGIN_MM))
+        private set
+
+    /** Number printed on this chapter's first page; pages are numbered across the whole book. */
+    var firstPageNumber by mutableIntStateOf(1)
         private set
     val blocks = mutableStateListOf<EditorBlock>()
     var focusRequest by mutableStateOf<FocusRequest?>(null)
@@ -175,6 +186,11 @@ class EditorViewModel @Inject constructor(
             return
         }
         bookId = chapter.bookId
+        viewModelScope.launch {
+            bookRepository.observeBook(chapter.bookId).filterNotNull().collect { book ->
+                pageSpec = PageSpec.of(book.pageSize, book.marginMm)
+            }
+        }
         title = TextFieldValue(chapter.title)
         blocks.addAll(blockRepository.getBlocks(chapterId).map(EditorBlock::from))
         if (blocks.isEmpty()) {
@@ -459,6 +475,18 @@ class EditorViewModel @Inject constructor(
         }
         last.setSelection(TextRange(last.value.text.length))
         focusRequest = FocusRequest(last.id)
+    }
+
+    /** Starts a new page after the last block and puts the caret on it. */
+    fun addPage() {
+        history.record(historyEntry())
+        val pageBreak = newBlock(BlockKind.PAGE_BREAK)
+        val paragraph = newBlock(BlockKind.PARAGRAPH)
+        blocks.add(pageBreak)
+        blocks.add(paragraph)
+        focusedBlockId = paragraph.id
+        focusRequest = FocusRequest(paragraph.id)
+        markStructureDirty()
     }
 
     fun imageFile(fileName: String): File? = bookId?.let { imageStore.imageFile(it, fileName) }
@@ -831,6 +859,7 @@ class EditorViewModel @Inject constructor(
     private companion object {
         val WHITESPACE = Regex("\\s+")
         const val TITLE_TYPING = "title"
+        const val DEFAULT_MARGIN_MM = 20
         const val TYPING_COALESCE_MILLIS = 2000L
 
         fun countWords(text: String): Int = text.split(WHITESPACE).count { it.isNotEmpty() }
