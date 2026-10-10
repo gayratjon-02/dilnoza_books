@@ -42,12 +42,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dilnoza.books.R
 import dilnoza.books.domain.model.TextAlignment
+import dilnoza.books.editor.layout.PageStyles
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -69,9 +69,7 @@ fun ImageBlockView(
     }
 
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         val fullWidthPx = constraints.maxWidth.toFloat()
         val imageWidth = maxWidth * (image.widthPercent / 100f)
@@ -196,10 +194,8 @@ private fun CaptionField(
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val style = MaterialTheme.typography.bodyMedium.copy(
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-    )
+    // Same caption style and gap the paginator measures, so the picture keeps its place on the page.
+    val style = PageStyles.caption().copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     BasicTextField(
         value = block.value,
         onValueChange = onValueChange,
@@ -207,7 +203,7 @@ private fun CaptionField(
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
         modifier = modifier
-            .padding(top = 6.dp)
+            .padding(top = PageStyles.CAPTION_GAP_PT.dp)
             .focusRequester(block.focusRequester)
             .onFocusChanged { if (it.isFocused) onFocused() },
         decorationBox = { inner ->
