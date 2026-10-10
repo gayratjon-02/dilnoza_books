@@ -491,7 +491,13 @@ fun EditorScreen(
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(DESK_PADDING_PT.dp),
+                            // Room below the last page so it and the add-page button scroll clear of the zoom control.
+                            contentPadding = PaddingValues(
+                                start = DESK_PADDING_PT.dp,
+                                top = DESK_PADDING_PT.dp,
+                                end = DESK_PADDING_PT.dp,
+                                bottom = DESK_PADDING_PT.dp + with(screenDensity) { (ZOOM_CONTROL_ROOM.toPx() / scale).dp },
+                            ),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             item(key = "title") {
@@ -594,7 +600,8 @@ fun EditorScreen(
                             }
                         }
                     }
-                    ZoomControl(
+                    // Hidden while the keyboard is up: the line being typed sits at the bottom of the view.
+                    if (keyboardPx == 0) ZoomControl(
                         zoom = viewModel.zoom,
                         canZoomIn = viewModel.canZoomIn,
                         canZoomOut = viewModel.canZoomOut,
@@ -1153,6 +1160,8 @@ private const val MAX_PICKED_IMAGES = 10
 private const val MAX_FOCUS_FRAMES = 6
 private val MIN_VISIBLE_BLOCK = 48.dp
 private val CARET_SIDE_MARGIN = 24.dp
+// The zoom control's height plus its margins.
+private val ZOOM_CONTROL_ROOM = 72.dp
 private val MENU_GAP = 4.dp
 private val MENU_ITEM_HEIGHT = 48.dp
 private val MENU_KEYS = setOf(Key.DirectionDown, Key.DirectionUp, Key.Enter, Key.NumPadEnter, Key.Escape)

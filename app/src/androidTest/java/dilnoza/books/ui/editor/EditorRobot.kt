@@ -72,7 +72,7 @@ class EditorRobot(private val rule: MainRule) {
         rule.onAllNodes(hasSetTextAction()).onFirst().performTextInput(bookTitle)
         rule.onNode(hasText(str(R.string.action_create))).performClick()
         bookCreated = true
-        waitFor { nodes(hasContentDescription(str(R.string.editor_zoom_in))).isNotEmpty() }
+        waitFor { nodes(hasContentDescription(str(R.string.find_open))).isNotEmpty() }
         rule.waitForIdle()
     }
 
@@ -100,14 +100,29 @@ class EditorRobot(private val rule: MainRule) {
 
     // --- Zoom -------------------------------------------------------------------------------
 
+    // The zoom control is hidden while the keyboard is up.
+    private fun showZoomControl() {
+        hideKeyboard()
+        waitFor { nodes(ZOOM_LABEL).isNotEmpty() }
+    }
+
+    fun zoomControlShown(): Boolean = nodes(ZOOM_LABEL).isNotEmpty()
+
     fun zoomPercent(): Int {
+        showZoomControl()
         val label = nodes(ZOOM_LABEL).single().config[SemanticsProperties.Text].first().text
         return label.removeSuffix("%").toInt()
     }
 
-    fun zoomInButton(): SemanticsNode = nodes(hasContentDescription(str(R.string.editor_zoom_in))).single()
+    fun zoomInButton(): SemanticsNode {
+        showZoomControl()
+        return nodes(hasContentDescription(str(R.string.editor_zoom_in))).single()
+    }
 
-    fun zoomOutButton(): SemanticsNode = nodes(hasContentDescription(str(R.string.editor_zoom_out))).single()
+    fun zoomOutButton(): SemanticsNode {
+        showZoomControl()
+        return nodes(hasContentDescription(str(R.string.editor_zoom_out))).single()
+    }
 
     /**
      * Taps [node] with a real touch. Compose test clicks are avoided in the editor: with the test
@@ -191,6 +206,9 @@ class EditorRobot(private val rule: MainRule) {
             (origin.y + visible.top + visible.height * yFraction).roundToInt(),
         )
         rule.waitForIdle()
+        // Keys sent while the keyboard is still connecting to the field can be dropped.
+        waitFor { keyboardShown() }
+        rule.waitForIdle()
     }
 
     fun type(text: String) {
@@ -215,12 +233,16 @@ class EditorRobot(private val rule: MainRule) {
         waitFor { nodes(hasSetTextAction() and isFocused()).singleOrNull()?.let { it.id != before && fieldText(it).isEmpty() } == true }
     }
 
-    fun hideKeyboard() {
+    fun keyboardShown(): Boolean {
         var shown = false
         instrumentation.runOnMainSync {
             shown = rule.activity.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
         }
-        if (shown) {
+        return shown
+    }
+
+    fun hideKeyboard() {
+        if (keyboardShown()) {
             device.pressBack()
             rule.waitForIdle()
         }

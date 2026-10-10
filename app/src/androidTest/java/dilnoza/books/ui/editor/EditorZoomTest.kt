@@ -115,6 +115,24 @@ class EditorZoomTest {
     }
 
     @Test
+    fun zoomControlStaysClearOfTheTextBeingTypedAndTheLastPage() {
+        robot.tapField(robot.blockFields().first())
+        robot.waitFor { robot.keyboardShown() }
+        rule.waitForIdle()
+        assertFalse("the zoom control must not cover the text while the keyboard is up", robot.zoomControlShown())
+
+        robot.hideKeyboard()
+        robot.waitFor { robot.zoomControlShown() }
+        // Scrolled to the end, the add-page button sits above the control, not under it.
+        rule.onNode(hasScrollToKeyAction()).performScrollToKey("add-page")
+        rule.waitForIdle()
+        val addPage = robot.nodes(hasText(robot.str(R.string.editor_add_page)), unmerged = true).first().boundsInRoot
+        val control = robot.nodes(EditorRobot.ZOOM_LABEL).single().boundsInRoot
+        robot.screenshot("zoom_control_end")
+        assertTrue("add-page button $addPage must end above the zoom control $control", addPage.bottom <= control.top - 12f)
+    }
+
+    @Test
     fun oneFingerSwipeScrollsPagesWithoutZooming() {
         // A few empty pages so the chapter is taller than the screen.
         val addPage = robot.str(R.string.editor_add_page)
@@ -164,7 +182,7 @@ class EditorZoomTest {
         robot.hideKeyboard()
         robot.device.setOrientationLandscape()
         try {
-            robot.waitFor { robot.nodes(hasContentDescription(robot.str(R.string.editor_zoom_out))).isNotEmpty() }
+            robot.waitFor { robot.nodes(hasContentDescription(robot.str(R.string.find_open))).isNotEmpty() }
             rule.waitForIdle()
             assertEquals(100, robot.zoomPercent())
             assertTrue("in landscape a page does not fit at 100%, so zoom out must be enabled", robot.zoomOutButton().isEnabled())
