@@ -10,6 +10,21 @@ data class Block(
 sealed interface BlockContent {
     data class Heading(val level: Int, val text: RichText) : BlockContent
     data class Paragraph(val text: RichText, val align: TextAlignment = TextAlignment.START) : BlockContent
+
+    /** [fileName] is relative to the book's image folder; [width]/[height] are the stored pixel size. */
+    data class Image(
+        val fileName: String,
+        val width: Int,
+        val height: Int,
+        val caption: String = "",
+        val widthPercent: Int = 100,
+        val align: TextAlignment = TextAlignment.CENTER,
+    ) : BlockContent {
+        companion object {
+            const val MIN_WIDTH_PERCENT = 20
+            const val MAX_WIDTH_PERCENT = 100
+        }
+    }
 }
 
 enum class TextAlignment { START, CENTER, END, JUSTIFY }

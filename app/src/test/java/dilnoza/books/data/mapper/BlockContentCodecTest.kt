@@ -43,4 +43,31 @@ class BlockContentCodecTest {
         assertEquals(TextAlignment.START, (BlockContentCodec.decode(raw) as BlockContent.Paragraph).align)
         assertEquals(3, (BlockContentCodec.decode(heading) as BlockContent.Heading).level)
     }
+
+    @Test
+    fun `image survives round trip`() {
+        val content = BlockContent.Image(
+            fileName = "a1b2.jpg",
+            width = 2048,
+            height = 1536,
+            caption = "Toshkent, 2026",
+            widthPercent = 60,
+            align = TextAlignment.END,
+        )
+
+        assertEquals("image", BlockContentCodec.typeOf(content))
+        assertEquals(content, BlockContentCodec.decode(BlockContentCodec.encode(content)))
+    }
+
+    @Test
+    fun `image width and size are clamped`() {
+        val raw = """{"kind":"image","file":"x.jpg","width":0,"height":-5,"widthPercent":400}"""
+
+        val image = BlockContentCodec.decode(raw) as BlockContent.Image
+
+        assertEquals(100, image.widthPercent)
+        assertEquals(1, image.width)
+        assertEquals(1, image.height)
+        assertEquals(TextAlignment.CENTER, image.align)
+    }
 }
