@@ -54,4 +54,6 @@
     <string name="editor_move_block_up">Переместить блок вверх</string>
     <string name="editor_move_block_down">Переместить блок вниз</string>
     <string name="editor_add_page">Новая страница</string>
+    <string name="editor_zoom_in">Увеличить</string>
+    <string name="editor_zoom_out">Уменьшить</string>
 </resources>

@@ -16,6 +16,9 @@ import androidx.compose.foundation.content.consume
 import androidx.compose.foundation.content.contentReceiver
 import androidx.compose.foundation.content.hasMediaType
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +29,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +45,7 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -51,6 +56,7 @@ import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.automirrored.outlined.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.outlined.FormatAlignRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
@@ -114,6 +120,8 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
@@ -154,6 +162,7 @@ import dilnoza.books.ui.editor.page.PageSlice
 import dilnoza.books.ui.editor.page.PointSpace
 import dilnoza.books.ui.editor.page.layoutContent
 import dilnoza.books.ui.editor.page.rememberEditorPages
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -380,12 +389,22 @@ fun EditorScreen(
                             } else {
                                 Modifier
                             },
-                        ),
+                        )
+                        .pinchToZoom(viewModel::zoomBy),
                 ) {
-                    // The page fills the screen width; everything inside is laid out in page points.
-                    val scale = constraints.maxWidth / (viewModel.pageSpec.widthPt + 2 * DESK_PADDING_PT)
+                    // At 100% the page fills the screen width; everything inside is laid out in page points,
+                    // so zooming only scales the drawing and never moves a line or page break.
+                    val deskWidthPt = viewModel.pageSpec.widthPt + 2 * DESK_PADDING_PT
+                    val scale = constraints.maxWidth / deskWidthPt * viewModel.zoom
                     SideEffect { pageScale = scale }
-                    PointSpace(scale = scale, modifier = Modifier.fillMaxSize()) {
+                    val deskWidth = with(LocalDensity.current) { (deskWidthPt * scale).toDp() }
+                    PointSpace(
+                        scale = scale,
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .horizontalScroll(rememberScrollState(), enabled = viewModel.zoom > 1f)
+                            .width(deskWidth),
+                    ) {
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
@@ -491,6 +510,16 @@ fun EditorScreen(
                             }
                         }
                     }
+                    ZoomControl(
+                        zoom = viewModel.zoom,
+                        canZoomIn = viewModel.canZoomIn,
+                        canZoomOut = viewModel.canZoomOut,
+                        onZoomIn = viewModel::zoomIn,
+                        onZoomOut = viewModel::zoomOut,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(12.dp),
+                    )
                 }
                 HorizontalDivider()
                 val focused = viewModel.focusedBlock
@@ -1009,3 +1038,54 @@ private val MENU_KEYS = setOf(Key.DirectionDown, Key.DirectionUp, Key.Enter, Key
 private const val LIST_LABEL_GAP_PT = 5f
 private const val DESK_PADDING_PT = 10f
 private val WIDTH_PRESETS = listOf(25, 50, 75, 100)
+
+@Composable
+private fun ZoomControl(
+    zoom: Float,
+    canZoomIn: Boolean,
+    canZoomOut: Boolean,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
+        tonalElevation = 3.dp,
+        shadowElevation = 4.dp,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onZoomOut, enabled = canZoomOut) {
+                Icon(Icons.Filled.Remove, contentDescription = stringResource(R.string.editor_zoom_out))
+            }
+            Text(
+                text = stringResource(R.string.editor_zoom_percent, (zoom * 100).roundToInt()),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            IconButton(onClick = onZoomIn, enabled = canZoomIn) {
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.editor_zoom_in))
+            }
+        }
+    }
+}
+
+/**
+ * Two-finger pinch changes the zoom; one finger is left alone so the pages still scroll and the
+ * text can be tapped and selected.
+ */
+private fun Modifier.pinchToZoom(onZoom: (Float) -> Unit): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        do {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (event.changes.count { it.pressed } >= 2) {
+                val factor = event.calculateZoom()
+                if (factor != 1f) {
+                    onZoom(factor)
+                    event.changes.forEach { it.consume() }
+                }
+            }
+        } while (event.changes.any { it.pressed })
+    }
+}

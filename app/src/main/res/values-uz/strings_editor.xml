@@ -52,4 +52,6 @@
     <string name="editor_move_block_up">Blokni yuqoriga surish</string>
     <string name="editor_move_block_down">Blokni pastga surish</string>
     <string name="editor_add_page">Yangi varaq</string>
+    <string name="editor_zoom_in">Kattalashtirish</string>
+    <string name="editor_zoom_out">Kichraytirish</string>
 </resources>
