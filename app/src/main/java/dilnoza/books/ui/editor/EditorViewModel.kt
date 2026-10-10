@@ -18,6 +18,7 @@ import dilnoza.books.data.files.ImageStore
 import dilnoza.books.domain.model.BlockContent
 import dilnoza.books.domain.model.POSITION_STEP
 import dilnoza.books.domain.model.RichText
+import dilnoza.books.domain.model.SpanStyleData
 import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.domain.repository.BlockRepository
 import dilnoza.books.domain.repository.ChapterRepository
@@ -67,6 +68,8 @@ class EditorViewModel @Inject constructor(
         private set
     private var bookId: String? = null
     private var focusedBlockId by mutableStateOf<String?>(null)
+    // Style chosen with a collapsed caret, given to the next typed characters until the caret moves.
+    private var typingStyle by mutableStateOf<SpanStyleData?>(null)
 
     val wordCount by derivedStateOf {
         blocks.sumOf { block ->
@@ -85,6 +88,8 @@ class EditorViewModel @Inject constructor(
         blocks.zip(ListNumbering.labels(items)) { block, label -> block.id to label }.toMap()
     }
     val focusedBlock: EditorBlock? get() = blocks.firstOrNull { it.id == focusedBlockId }
+    /** Format bar state, or null when no text block is focused. */
+    val formatState: FormatState? get() = focusedTextBlock()?.formatState(typingStyle)
 
     // Guarded by [lock]: what changed since the last successful save.
     private val lock = Any()
@@ -135,12 +140,45 @@ class EditorViewModel @Inject constructor(
             splitHeading(block, value)
             return
         }
-        block.setValue(value)
+        val caretMoved = !textChanged && value.selection != block.value.selection
+        block.setValue(value, typingStyle)
         if (textChanged) markDirty(block.id)
+        if (caretMoved) typingStyle = null
     }
 
     fun onBlockFocused(id: String) {
+        if (id != focusedBlockId) typingStyle = null
         focusedBlockId = id
+    }
+
+    fun format(change: FormatChange) {
+        val block = focusedTextBlock() ?: return
+        val before = block.rich
+        typingStyle = block.applyFormat(change, typingStyle)
+        if (block.rich != before) markDirty(block.id)
+    }
+
+    fun setFocusedAlign(align: TextAlignment) {
+        val block = focusedTextBlock() ?: return
+        if (block.align == align) return
+        block.align = align
+        markDirty(block.id)
+    }
+
+    /** Turns the focused text block into a paragraph, or into a heading of [headingLevel]. */
+    fun setFocusedTextStyle(headingLevel: Int?) {
+        val block = focusedTextBlock() ?: return
+        val kind = if (headingLevel == null) BlockKind.PARAGRAPH else BlockKind.HEADING
+        if (block.kind == kind && (headingLevel == null || block.headingLevel == headingLevel)) return
+        block.kind = kind
+        if (headingLevel != null) {
+            block.headingLevel = headingLevel
+            if (block.value.text.contains('\n')) {
+                // Same length, so the spans still line up.
+                block.setRich(block.rich.copy(text = block.rich.text.replace('\n', ' ')), block.value.selection)
+            }
+        }
+        markDirty(block.id)
     }
 
     fun onFocusRequestHandled() {
@@ -153,16 +191,6 @@ class EditorViewModel @Inject constructor(
         blocks.add(index, block)
         focusRequest = FocusRequest(block.id)
         markStructureDirty()
-    }
-
-    fun toggleFocusedKind() {
-        val block = focusedBlock?.takeIf { it.kind.isText } ?: return
-        block.kind = if (block.kind == BlockKind.HEADING) BlockKind.PARAGRAPH else BlockKind.HEADING
-        if (block.kind == BlockKind.HEADING && block.value.text.contains('\n')) {
-            // Same length, so the spans still line up.
-            block.setRich(block.rich.copy(text = block.rich.text.replace('\n', ' ')), block.value.selection)
-        }
-        markDirty(block.id)
     }
 
     fun deleteFocusedBlock() {
@@ -242,6 +270,7 @@ class EditorViewModel @Inject constructor(
     }
 
     fun selectBlock(id: String) {
+        typingStyle = null
         focusedBlockId = id
     }
 
@@ -290,6 +319,8 @@ class EditorViewModel @Inject constructor(
         focusRequest = FocusRequest(paragraph.id)
         markStructureDirty()
     }
+
+    private fun focusedTextBlock(): EditorBlock? = focusedBlock?.takeIf { it.kind.isText }
 
     private fun newBlock(kind: BlockKind, rich: RichText = RichText.Empty) =
         EditorBlock(UUID.randomUUID().toString(), kind, rich, TextRange(0))

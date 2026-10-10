@@ -94,7 +94,8 @@ class EditorBlock(
 
     fun setRich(newRich: RichText, selection: TextRange = TextRange(newRich.text.length)) {
         rich = newRich.normalized()
-        value = TextFieldValue(newRich.text, selection)
+        // A pure restyle keeps the keyboard's composing region, so the word being typed stays in sync.
+        value = if (newRich.text == value.text) value.copy(selection = selection) else TextFieldValue(newRich.text, selection)
     }
 
     fun setSelection(selection: TextRange) {

@@ -307,7 +307,9 @@ fun EditorScreen(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
                         },
-                        onToggleKind = viewModel::toggleFocusedKind,
+                        onToggleKind = {
+                            viewModel.setFocusedTextStyle(if (focused?.kind == BlockKind.HEADING) null else 1)
+                        },
                         onDelete = viewModel::deleteFocusedBlock,
                     )
                 }
