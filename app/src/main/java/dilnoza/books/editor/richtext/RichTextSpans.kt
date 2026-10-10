@@ -162,3 +162,37 @@ fun RichText.setFontFamily(start: Int, end: Int, value: String?): RichText =
     applyStyle(start, end) { it.copy(fontFamily = value) }
 
 fun RichText.clearFormatting(start: Int, end: Int): RichText = applyStyle(start, end) { SpanStyleData.Default }
+
+/**
+ * Characters in `[start, end)` with their styles. Indices are clamped, and one that falls inside
+ * a surrogate pair moves before it so the pair is never cut.
+ */
+fun RichText.subText(start: Int, end: Int): RichText {
+    val base = normalized()
+    val from = base.text.snapBackward(start.coerceIn(0, base.text.length))
+    val to = base.text.snapBackward(end.coerceIn(0, base.text.length))
+    if (from >= to) return RichText.Empty
+    if (from == 0 && to == base.text.length) return base
+    val out = ArrayList<StyleSpan>()
+    for (run in base.spans) {
+        if (run.end <= from || run.start >= to) continue
+        out += StyleSpan(maxOf(run.start, from) - from, minOf(run.end, to) - from, run.style)
+    }
+    return RichText(base.text.substring(from, to), out)
+}
+
+/** Splits at [index] (clamped, never inside a surrogate pair); the halves concatenate back to the original. */
+fun RichText.split(index: Int): Pair<RichText, RichText> {
+    val at = text.snapBackward(index.coerceIn(0, text.length))
+    return subText(0, at) to subText(at, text.length)
+}
+
+operator fun RichText.plus(other: RichText): RichText {
+    val head = normalized()
+    val tail = other.normalized()
+    if (tail.text.isEmpty()) return head
+    if (head.text.isEmpty()) return tail
+    val offset = head.text.length
+    val shifted = tail.spans.map { StyleSpan(it.start + offset, it.end + offset, it.style) }
+    return RichText(head.text + tail.text, head.spans + shifted).normalized()
+}
