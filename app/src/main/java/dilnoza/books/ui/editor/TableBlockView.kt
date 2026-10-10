@@ -1,6 +1,16 @@
 package dilnoza.books.ui.editor
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -143,6 +153,7 @@ fun TableBlockView(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TableCell(
     rich: RichText,
@@ -162,6 +173,17 @@ private fun TableCell(
     val darkTheme = isDarkPage()
     val transformation = remember(rich, darkTheme) { RichTextTransformation(rich, darkTheme) }
     val lineColor = MaterialTheme.colorScheme.outlineVariant
+    val bringIntoView = remember { BringIntoViewRequester() }
+    var cellSize by remember { mutableStateOf(IntSize.Zero) }
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    val margin = with(LocalDensity.current) { CELL_VIEW_MARGIN.toPx() }
+    // The field only keeps its caret line in view; show the whole cell with some room around it once
+    // the keyboard has finished resizing the page (the effect restarts on every frame it moves).
+    LaunchedEffect(focused, imeBottom) {
+        if (!focused) return@LaunchedEffect
+        delay(SETTLE_MILLIS)
+        bringIntoView.bringIntoView(Rect(0f, -margin, cellSize.width.toFloat(), cellSize.height + margin))
+    }
     BasicTextField(
         value = shown,
         onValueChange = { new ->
@@ -192,6 +214,8 @@ private fun TableCell(
         modifier = Modifier
             .width(width)
             .fillMaxHeight()
+            .onSizeChanged { cellSize = it }
+            .bringIntoViewRequester(bringIntoView)
             .border(0.5.dp, lineColor)
             .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary) else Modifier)
             .focusRequester(focusRequester)
@@ -216,3 +240,5 @@ private fun TableCell(
 }
 
 private val MIN_COLUMN_WIDTH = 112.dp
+private val CELL_VIEW_MARGIN = 16.dp
+private const val SETTLE_MILLIS = 60L
