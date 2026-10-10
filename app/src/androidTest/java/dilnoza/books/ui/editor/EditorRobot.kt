@@ -138,6 +138,17 @@ class EditorRobot(private val rule: MainRule) {
 
     fun horizontalScrollMax(): Float = pageScroller().config[SemanticsProperties.HorizontalScrollAxisRange].maxValue()
 
+    /**
+     * Height of one page on screen: a new book has A5 pages, which fill the list's width less the
+     * desk padding at 100% zoom.
+     */
+    fun pageHeightOnScreen(): Float {
+        val a5Width = 148f / 25.4f * 72f
+        val a5Height = 210f / 25.4f * 72f
+        val scale = pageList().boundsInRoot.width / (a5Width + 2 * DESK_PADDING_PT) * zoomPercent() / 100f
+        return a5Height * scale
+    }
+
     /** On-screen rectangle (pixels) of the visible part of the page list. */
     fun pageListOnScreen(): Rect = pageList().boundsInRoot.let { bounds ->
         val origin = rootOnScreen()
@@ -310,6 +321,7 @@ class EditorRobot(private val rule: MainRule) {
     }
 
     companion object {
+        const val DESK_PADDING_PT = 10f
         const val DATABASE_NAME = "dilnoza_books.db"
         const val DEFAULT_TIMEOUT_MS = 10_000L
         const val SAVE_TIMEOUT_MS = 15_000L

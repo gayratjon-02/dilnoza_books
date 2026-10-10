@@ -364,6 +364,7 @@ fun EditorScreen(
                         firstPageNumber = viewModel.firstPageNumber,
                         colors = pageColors,
                         numberMeasurer = numberMeasurer,
+                        contentScale = placed.scale,
                         content = content,
                     )
                 }

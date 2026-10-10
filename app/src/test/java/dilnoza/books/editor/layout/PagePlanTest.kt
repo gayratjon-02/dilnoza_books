@@ -29,6 +29,17 @@ class PagePlanTest {
     }
 
     @Test
+    fun `box taller than a page keeps the scale it is drawn at`() {
+        val plan = plan(text("a", 2), FlowItem.Box("table", heightPt = 400f), FlowItem.Box("small", heightPt = 20f))
+
+        val table = plan.blocks.getValue("table")
+        assertEquals(0.25f, table.scale, 0.001f)
+        assertEquals(100f, table.heightPt, 0.01f)
+        assertEquals(1f, plan.blocks.getValue("small").scale, 0.001f)
+        assertEquals(1f, plan.blocks.getValue("a").scale, 0.001f)
+    }
+
+    @Test
     fun `spacing between blocks becomes lead`() {
         val plan = plan(text("a", 2, after = 4f), text("b", 2, before = 6f))
 

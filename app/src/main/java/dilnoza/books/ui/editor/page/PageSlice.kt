@@ -11,13 +11,16 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import dilnoza.books.editor.layout.PagePlan
 import dilnoza.books.editor.layout.PageStyles
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
@@ -39,6 +42,7 @@ fun PageSlice(
     colors: PageColors,
     numberMeasurer: TextMeasurer,
     modifier: Modifier = Modifier,
+    contentScale: Float = 1f,
     content: @Composable () -> Unit = {},
 ) {
     val spec = plan.spec
@@ -54,7 +58,34 @@ fun PageSlice(
                 .width(spec.columnWidthPt.dp)
                 .then(if (contentHeightPt != null) Modifier.requiredHeight(contentHeightPt.dp) else Modifier),
         ) {
-            content()
+            if (contentScale < 1f) ScaledDown(contentScale, content) else content()
+        }
+    }
+}
+
+/**
+ * Lays [content] out at the full column width and its natural height, as the paginator measured it,
+ * and draws it shrunk by [scale] from the top centre, so it fills exactly the slot planned for it.
+ */
+@Composable
+private fun ScaledDown(scale: Float, content: @Composable () -> Unit) {
+    Layout(content) { measurables, constraints ->
+        val natural = constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity)
+        val placeables = measurables.map { it.measure(natural) }
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else placeables.maxOfOrNull { it.width } ?: 0
+        val height = if (constraints.hasBoundedHeight) {
+            constraints.maxHeight
+        } else {
+            ceil((placeables.maxOfOrNull { it.height } ?: 0) * scale).toInt()
+        }
+        layout(width, height) {
+            placeables.forEach { placeable ->
+                placeable.placeWithLayer((width - placeable.width) / 2, 0) {
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0.5f, 0f)
+                }
+            }
         }
     }
 }

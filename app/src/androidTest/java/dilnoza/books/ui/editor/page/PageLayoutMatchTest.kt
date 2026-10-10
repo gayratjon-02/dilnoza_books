@@ -12,6 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -33,12 +36,14 @@ import dilnoza.books.editor.layout.PagePlan
 import dilnoza.books.editor.layout.PageSpec
 import dilnoza.books.editor.layout.PageStyles
 import dilnoza.books.editor.layout.Pagination
+import dilnoza.books.editor.layout.Paginator
 import dilnoza.books.ui.editor.BlockKind
 import dilnoza.books.ui.editor.EditorBlock
 import dilnoza.books.ui.editor.TableBlockView
 import dilnoza.books.ui.editor.TableState
 import dilnoza.books.ui.editor.toAnnotatedString
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -126,6 +131,54 @@ class PageLayoutMatchTest {
                 }
                 assertEquals("tables drawn at another height than planned (width ${spec.columnWidthPt})", emptyList<String>(), mismatches)
             }
+        }
+    }
+
+    @Test
+    fun tableTallerThanAPageIsDrawnShrunkInsideItsSlot() {
+        val spec = SPECS.first()
+        val table = BlockContent.Table(rows = List(30) { row -> List(3) { RichText("Qator ${row + 1}") } }, headerRow = true)
+        val measured = measurer(spec).tableHeight(table)
+        val pagination = Paginator(spec.contentHeightPt).paginate(listOf(FlowItem.Box("t", measured)))
+        val plan = PagePlan.build(spec, 18f, listOf("t"), pagination).blocks.getValue("t")
+        assertTrue("the table should not fit on a page: $measured", plan.scale < 1f)
+        var slot = Rect.Zero
+        var drawn = Rect.Zero
+        show {
+            Box(Modifier.onGloballyPositioned { slot = it.boundsInRoot() }) {
+                PageSlice(
+                    plan = PagePlan.build(spec, 18f, listOf("t"), pagination),
+                    startPt = 0f,
+                    endPt = plan.endPt,
+                    contentTopPt = plan.leadPt,
+                    contentHeightPt = plan.heightPt,
+                    firstPageNumber = 1,
+                    colors = PageColors(Color.White, Color.Gray, Color.Black),
+                    numberMeasurer = TextMeasurer(LocalFontFamilyResolver.current, PageMeasurer.PointDensity, LayoutDirection.Ltr),
+                    contentScale = plan.scale,
+                ) {
+                    Box(Modifier.onGloballyPositioned { drawn = it.boundsInRoot() }) {
+                        val state = TableState.of(table)
+                        TableBlockView(
+                            block = EditorBlock("t", BlockKind.TABLE, table = state),
+                            table = state,
+                            selected = false,
+                            focusedCell = null,
+                            onCellFocused = {},
+                            onCellChange = { _, _ -> },
+                            onCellNext = { _, _, _ -> },
+                        )
+                    }
+                }
+            }
+        }
+        rule.runOnIdle {
+            val top = slot.top + plan.leadPt
+            assertEquals("shrunk table top", top, drawn.top, 1f)
+            assertEquals("shrunk table height", plan.heightPt, drawn.height, 1f)
+            assertTrue("table must end inside its page: $drawn vs page bottom ${top + spec.contentHeightPt}",
+                drawn.bottom <= top + spec.contentHeightPt + 1f)
+            assertEquals("shrunk table width", spec.columnWidthPt * plan.scale, drawn.width, 1f)
         }
     }
 

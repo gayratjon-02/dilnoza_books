@@ -55,7 +55,7 @@ data class PagePlan(
                     val nextPage = order.getOrNull(index + 1)?.let { byBlock[it]?.firstOrNull()?.pageIndex }
                     if (nextPage == null || nextPage > first.pageIndex) bottom = docY(first.pageIndex, spec.contentHeightPt)
                 }
-                plans[id] = BlockPlan(startPt = end, leadPt = lead, heightPt = bottom - top, innerGaps = gaps)
+                plans[id] = BlockPlan(startPt = end, leadPt = lead, heightPt = bottom - top, innerGaps = gaps, scale = first.scale)
                 end = top + (bottom - top)
             }
 
@@ -76,6 +76,8 @@ data class BlockPlan(
     val heightPt: Float,
     /** Page gaps inside a text block that continues on the next page, before the given line. */
     val innerGaps: List<InnerGap>,
+    /** Below 1 for a picture or table the paginator shrank to fit on one page; it must be drawn at this scale. */
+    val scale: Float = 1f,
 ) {
     val endPt: Float get() = startPt + leadPt + heightPt
 }
