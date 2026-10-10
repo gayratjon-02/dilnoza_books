@@ -27,9 +27,6 @@ import dilnoza.books.editor.autosave.SaveStatus
 import dilnoza.books.editor.commands.ListItem
 import dilnoza.books.editor.commands.ListKind
 import dilnoza.books.editor.commands.ListNumbering
-import dilnoza.books.editor.richtext.RichTextEditor
-import dilnoza.books.editor.richtext.split
-import dilnoza.books.editor.richtext.subText
 import dilnoza.books.ui.navigation.EditorRoute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -97,6 +94,8 @@ class EditorViewModel @Inject constructor(
     private val deletedIds = mutableSetOf<String>()
     private var titleDirty = false
 
+    private val editing = BlockEditing(blocks, ::newBlock)
+
     private val autoSaver = AutoSaver(scope = appScope, write = ::persist)
     val saveStatus: StateFlow<SaveStatus> = autoSaver.status
 
@@ -136,14 +135,14 @@ class EditorViewModel @Inject constructor(
 
     fun onBlockChange(block: EditorBlock, value: TextFieldValue) {
         val textChanged = value.text != block.value.text
-        if (block.kind == BlockKind.HEADING && value.text.contains('\n')) {
-            splitHeading(block, value)
+        if (!textChanged || !block.kind.isText) {
+            val caretMoved = !textChanged && value.selection != block.value.selection
+            block.setValue(value, typingStyle)
+            if (textChanged) markDirty(block.id)
+            if (caretMoved) typingStyle = null
             return
         }
-        val caretMoved = !textChanged && value.selection != block.value.selection
-        block.setValue(value, typingStyle)
-        if (textChanged) markDirty(block.id)
-        if (caretMoved) typingStyle = null
+        apply(editing.type(block, value, typingStyle))
     }
 
     fun onBlockFocused(id: String) {
@@ -308,16 +307,23 @@ class EditorViewModel @Inject constructor(
         autoSaver.flushInBackground()
     }
 
-    private fun splitHeading(block: EditorBlock, value: TextFieldValue) {
-        val breakAt = value.text.indexOf('\n')
-        val edited = RichTextEditor.applyTextChange(block.rich, value.text, cursor = value.selection.end)
-        val (heading, tail) = edited.split(breakAt)
-        val rest = tail.subText(1, tail.text.length)
-        block.setRich(heading)
-        val paragraph = newBlock(BlockKind.PARAGRAPH, rest.copy(text = rest.text.replace('\n', ' ')))
-        blocks.add(blocks.indexOf(block) + 1, paragraph)
-        focusRequest = FocusRequest(paragraph.id)
-        markStructureDirty()
+    private fun apply(edit: BlockEdit) {
+        when (edit) {
+            is BlockEdit.Content -> markDirty(edit.blockId)
+            is BlockEdit.Structure -> {
+                typingStyle = null
+                synchronized(lock) {
+                    dirtyIds.removeAll(edit.removedIds.toSet())
+                    deletedIds.addAll(edit.removedIds)
+                }
+                edit.focusId?.let {
+                    focusedBlockId = it
+                    focusRequest = FocusRequest(it)
+                }
+                edit.selectId?.let { selectBlock(it) }
+                markStructureDirty()
+            }
+        }
     }
 
     private fun focusedTextBlock(): EditorBlock? = focusedBlock?.takeIf { it.kind.isText }
