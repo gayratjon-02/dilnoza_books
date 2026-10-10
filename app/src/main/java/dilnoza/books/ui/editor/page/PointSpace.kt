@@ -2,11 +2,13 @@ package dilnoza.books.ui.editor.page
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import dilnoza.books.editor.layout.PageMeasurer
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -22,10 +24,16 @@ fun PointSpace(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    val screenDensity = LocalDensity.current
     Layout(
         modifier = modifier,
         content = {
-            CompositionLocalProvider(LocalDensity provides PageMeasurer.PointDensity, content = content)
+            CompositionLocalProvider(
+                LocalDensity provides PageMeasurer.PointDensity,
+                LocalScreenDensity provides screenDensity,
+                LocalPageScale provides scale,
+                content = content,
+            )
         },
     ) { measurables, constraints ->
         val inner = constraints.unscaled(scale)
@@ -42,6 +50,27 @@ fun PointSpace(
             }
         }
     }
+}
+
+/** The real screen density, for UI inside [PointSpace] that must keep its normal size (popups, menus). */
+val LocalScreenDensity = staticCompositionLocalOf<Density?> { null }
+
+/** Screen pixels per page point inside [PointSpace]; 1 outside it. */
+val LocalPageScale = staticCompositionLocalOf { 1f }
+
+/** Restores normal screen sizes for [content] placed inside [PointSpace], e.g. a popup's body. */
+@Composable
+fun ScreenDensity(content: @Composable () -> Unit) {
+    val density = LocalScreenDensity.current ?: LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides density, LocalPageScale provides 1f, content = content)
+}
+
+/** Normal-sized UI (buttons, labels) placed inside the scaled page list. */
+@Composable
+fun NormalSize(content: @Composable () -> Unit) {
+    val screen = LocalScreenDensity.current ?: LocalDensity.current
+    val scale = LocalPageScale.current
+    CompositionLocalProvider(LocalDensity provides Density(screen.density / scale, screen.fontScale), content = content)
 }
 
 private fun Constraints.unscaled(scale: Float): Constraints {
