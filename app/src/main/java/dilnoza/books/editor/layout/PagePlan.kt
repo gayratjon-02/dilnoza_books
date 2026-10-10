@@ -1,5 +1,7 @@
 package dilnoza.books.editor.layout
 
+import kotlin.math.roundToInt
+
 /**
  * Turns a [Pagination] into a vertical "document" where pages are stacked with a [gapPt] between
  * them, and tells every block where it sits in it. The editor renders blocks one after another, so
@@ -15,13 +17,17 @@ data class PagePlan(
     val tailPt: Float,
 ) {
     val pageStridePt: Float get() = spec.heightPt + gapPt
-    val documentHeightPt: Float get() = pageCount * spec.heightPt + (pageCount - 1).coerceAtLeast(0) * gapPt
+    val documentHeightPt: Float get() =
+        (pageCount * spec.heightPt + (pageCount - 1).coerceAtLeast(0) * gapPt).roundToInt().toFloat()
 
-    fun pageTop(page: Int): Float = page * pageStridePt
+    fun pageTop(page: Int): Float = (page * pageStridePt).roundToInt().toFloat()
+
+    fun pageBottom(page: Int): Float = (page * pageStridePt + spec.heightPt).roundToInt().toFloat()
 
     companion object {
         fun build(spec: PageSpec, gapPt: Float, order: List<String>, pagination: Pagination): PagePlan {
-            fun docY(page: Int, y: Float) = page * (spec.heightPt + gapPt) + spec.marginPt + y
+            // Whole points: block items are laid out in whole units, so they tile the pages without seams.
+            fun docY(page: Int, y: Float) = (page * (spec.heightPt + gapPt) + spec.marginPt + y).roundToInt().toFloat()
             val byBlock = pagination.fragments.groupBy { it.blockId }
             val plans = LinkedHashMap<String, BlockPlan>()
             var end = 0f
@@ -54,7 +60,7 @@ data class PagePlan(
             }
 
             val pageCount = pagination.pageCount
-            val documentEnd = docY(pageCount - 1, spec.contentHeightPt) + spec.marginPt
+            val documentEnd = (pageCount * spec.heightPt + (pageCount - 1) * gapPt).roundToInt().toFloat()
             return PagePlan(spec, gapPt, pageCount, plans, tailPt = (documentEnd - end).coerceAtLeast(0f))
         }
     }
