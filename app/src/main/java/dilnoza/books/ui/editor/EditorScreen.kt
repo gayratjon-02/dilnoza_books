@@ -88,6 +88,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
@@ -110,6 +119,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dilnoza.books.R
 import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.editor.autosave.SaveStatus
+import dilnoza.books.editor.richtext.StyleAttribute
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -260,6 +270,7 @@ fun EditorScreen(
                                 listLabel = viewModel.listLabels[block.id],
                                 onValueChange = { viewModel.onBlockChange(block, it) },
                                 onFocused = { viewModel.onBlockFocused(block.id) },
+                                onFormat = viewModel::format,
                                 onImagesPasted = { uris ->
                                     viewModel.insertImages(resolver.openImageSources(uris))
                                 },
@@ -354,6 +365,7 @@ private fun BlockField(
     listLabel: String?,
     onValueChange: (TextFieldValue) -> Unit,
     onFocused: () -> Unit,
+    onFormat: (FormatChange) -> Unit,
     onImagesPasted: (List<Uri>) -> Unit,
 ) {
     val kind = block.kind
@@ -417,6 +429,11 @@ private fun BlockField(
                 .weight(1f)
                 .focusRequester(block.focusRequester)
                 .onFocusChanged { if (it.isFocused) onFocused() }
+                .onPreviewKeyEvent { event ->
+                    val change = event.formatShortcut() ?: return@onPreviewKeyEvent false
+                    if (event.type == KeyEventType.KeyDown) onFormat(change)
+                    true
+                }
                 // Images pasted from the clipboard or inserted by the keyboard (e.g. a fresh screenshot).
                 .contentReceiver { content ->
                     if (!content.hasMediaType(MediaType.Image)) return@contentReceiver content
@@ -433,6 +450,19 @@ private fun BlockField(
                 }
             },
         )
+    }
+}
+
+/** Word-processor shortcuts on a hardware keyboard: Ctrl+B, I, U, Ctrl+Shift+X and Ctrl+Backslash. */
+private fun KeyEvent.formatShortcut(): FormatChange? {
+    if (!isCtrlPressed || isAltPressed) return null
+    return when {
+        key == Key.B && !isShiftPressed -> FormatChange.Toggle(StyleAttribute.BOLD)
+        key == Key.I && !isShiftPressed -> FormatChange.Toggle(StyleAttribute.ITALIC)
+        key == Key.U && !isShiftPressed -> FormatChange.Toggle(StyleAttribute.UNDERLINE)
+        key == Key.X && isShiftPressed -> FormatChange.Toggle(StyleAttribute.STRIKETHROUGH)
+        key == Key.Backslash && !isShiftPressed -> FormatChange.Clear
+        else -> null
     }
 }
 
