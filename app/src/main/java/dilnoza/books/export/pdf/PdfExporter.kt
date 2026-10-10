@@ -161,7 +161,8 @@ private class PagePainter(
 
     /** Lines [Fragment.firstLine, Fragment.endLine) of the text, laid out at the editor's width. */
     fun drawText(scope: DrawScope, fragment: Fragment, rich: RichText, style: TextStyle, insetPt: Float) {
-        if (fragment.endLine <= fragment.firstLine) return
+        // An empty paragraph only takes its line on the page; there is nothing to draw.
+        if (fragment.endLine <= fragment.firstLine || rich.text.isEmpty()) return
         val layout = layout(rich.toAnnotatedString(), style, column - insetPt.toInt())
         val x = left + insetPt
         val y = top(fragment)
