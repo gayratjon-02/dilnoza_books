@@ -81,6 +81,8 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.mimeTypes
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
@@ -195,13 +197,19 @@ fun EditorScreen(
     val request = viewModel.focusRequest
     LaunchedEffect(request) {
         if (request == null) return@LaunchedEffect
-        val index = viewModel.blocks.indexOfFirst { it.id == request.blockId }
-        if (index >= 0) {
+        val target = viewModel.blocks.firstOrNull { it.id == request.blockId }
+        // A block added in this frame has no field yet; focus moves as soon as it has one, so that
+        // keys typed right after Enter land in the new block.
+        if (target != null && !target.focusRequester.tryFocus()) {
+            withFrameNanos { }
+            val index = viewModel.blocks.indexOf(target)
             val visible = listState.layoutInfo.visibleItemsInfo.any { it.key == request.blockId }
             // +1 skips the chapter title item.
-            if (!visible) listState.scrollToItem(index + 1)
-            withFrameNanos { }
-            runCatching { viewModel.blocks[index].focusRequester.requestFocus() }
+            if (!visible && index >= 0) listState.scrollToItem(index + 1)
+            if (!target.focusRequester.tryFocus()) {
+                withFrameNanos { }
+                target.focusRequester.tryFocus()
+            }
         }
         viewModel.onFocusRequestHandled()
     }
@@ -474,6 +482,8 @@ private fun BlockField(
         )
     }
 }
+
+private fun FocusRequester.tryFocus(): Boolean = runCatching { requestFocus(FocusDirection.Enter) }.getOrDefault(false)
 
 private fun KeyEvent.isPlain(): Boolean = !isCtrlPressed && !isAltPressed && !isShiftPressed
 
