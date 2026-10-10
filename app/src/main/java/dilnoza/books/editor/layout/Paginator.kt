@@ -45,8 +45,14 @@ data class Fragment(
     val scale: Float = 1f,
 )
 
-data class Pagination(val pageCount: Int, val fragments: List<Fragment>) {
+data class Pagination(
+    val pageCount: Int,
+    val fragments: List<Fragment>,
+    val breakIds: Set<String> = emptySet(),
+) {
     fun fragmentsOf(blockId: String): List<Fragment> = fragments.filter { it.blockId == blockId }
+
+    fun isBreak(blockId: String): Boolean = blockId in breakIds
 }
 
 /**
@@ -140,7 +146,11 @@ class Paginator(
                 }
             }
         }
-        return Pagination(pageCount = page + 1, fragments = fragments)
+        return Pagination(
+            pageCount = page + 1,
+            fragments = fragments,
+            breakIds = items.filterIsInstance<FlowItem.Break>().mapTo(HashSet()) { it.blockId },
+        )
     }
 
     /** Minimum height the next block needs on the same page for a heading to stay with it. */
