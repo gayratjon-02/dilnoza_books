@@ -12,5 +12,7 @@ interface BookRepository {
     suspend fun createBook(title: String, author: String, firstChapterTitle: String): CreatedBook
     suspend fun updateBookInfo(id: String, title: String, author: String)
     suspend fun updatePageSize(id: String, pageSize: PageSize)
+    /** Sets the cover to an image file already stored for this book, or removes it with null. */
+    suspend fun updateCover(id: String, coverFileName: String?)
     suspend fun deleteBook(id: String)
 }

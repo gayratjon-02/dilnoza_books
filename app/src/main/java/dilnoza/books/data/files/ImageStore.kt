@@ -37,15 +37,30 @@ class ImageStore @Inject constructor(
 
     fun imageFile(bookId: String, fileName: String): File = File(imagesDir(bookId), fileName)
 
+    /** Covers sit beside `images/`, so the orphan cleaner, which only knows block pictures, never sees them. */
+    fun coverFile(bookId: String, fileName: String): File = File(booksRoot, "$bookId/$fileName")
+
     /** Takes ownership of [source] and closes it. */
-    suspend fun import(bookId: String, source: ParcelFileDescriptor): StoredImage = withContext(Dispatchers.IO) {
+    suspend fun importCover(bookId: String, source: ParcelFileDescriptor): String =
+        copyAndEncode(source) { encode(File(booksRoot, bookId), it, COVER_PREFIX).fileName }
+
+    fun deleteCover(bookId: String, fileName: String) {
+        // The name comes from the database; only a cover file of this book may be removed.
+        if (fileName.startsWith(COVER_PREFIX) && '/' !in fileName) coverFile(bookId, fileName).delete()
+    }
+
+    /** Takes ownership of [source] and closes it. */
+    suspend fun import(bookId: String, source: ParcelFileDescriptor): StoredImage =
+        copyAndEncode(source) { encode(imagesDir(bookId), it) }
+
+    private suspend fun <T> copyAndEncode(source: ParcelFileDescriptor, encode: (File) -> T): T = withContext(Dispatchers.IO) {
         val temp = File.createTempFile("import", ".tmp", context.cacheDir)
         try {
             // Copy first: the source may be a pipe that cannot be read twice (bounds pass + decode pass).
             ParcelFileDescriptor.AutoCloseInputStream(source).use { input ->
                 temp.outputStream().use { output -> input.copyTo(output) }
             }
-            decodeMutex.withLock { encode(bookId, temp) }
+            decodeMutex.withLock { encode(temp) }
         } finally {
             temp.delete()
         }
@@ -55,7 +70,7 @@ class ImageStore @Inject constructor(
         File(booksRoot, bookId).deleteRecursively()
     }
 
-    private fun encode(bookId: String, file: File): StoredImage {
+    private fun encode(dir: File, file: File, prefix: String = ""): StoredImage {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)
         require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Unsupported image" }
@@ -75,8 +90,8 @@ class ImageStore @Inject constructor(
 
         try {
             val transparent = scaled.hasAlpha() && scaled.hasTransparentPixels()
-            val fileName = "${UUID.randomUUID()}.${if (transparent) "png" else "jpg"}"
-            val dir = imagesDir(bookId).apply { mkdirs() }
+            val fileName = "$prefix${UUID.randomUUID()}.${if (transparent) "png" else "jpg"}"
+            dir.mkdirs()
             val partial = File(dir, "$fileName.part")
             partial.outputStream().buffered().use { out ->
                 val format = if (transparent) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
@@ -120,5 +135,8 @@ class ImageStore @Inject constructor(
 
     private companion object {
         const val JPEG_QUALITY = 85
+
+        // A new name for every cover, so a replaced cover never shows from the image cache.
+        const val COVER_PREFIX = "cover-"
     }
 }

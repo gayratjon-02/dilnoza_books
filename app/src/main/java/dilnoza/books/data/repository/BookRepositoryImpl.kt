@@ -77,6 +77,12 @@ class BookRepositoryImpl @Inject constructor(
         bookDao.updatePageSize(id, pageSize.name, clock.now())
     }
 
+    override suspend fun updateCover(id: String, coverFileName: String?) {
+        val old = bookDao.coverPath(id)
+        bookDao.updateCover(id, coverFileName, clock.now())
+        if (old != null && old != coverFileName) imageStore.deleteCover(id, old)
+    }
+
     override suspend fun deleteBook(id: String) {
         bookDao.delete(id)
         imageStore.deleteBook(id)

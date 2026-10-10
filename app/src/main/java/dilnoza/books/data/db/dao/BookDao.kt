@@ -34,6 +34,12 @@ interface BookDao {
     @Query("UPDATE books SET page_size = :pageSize, updated_at = :updatedAt WHERE id = :id")
     suspend fun updatePageSize(id: String, pageSize: String, updatedAt: Long)
 
+    @Query("SELECT cover_path FROM books WHERE id = :id")
+    suspend fun coverPath(id: String): String?
+
+    @Query("UPDATE books SET cover_path = :coverPath, updated_at = :updatedAt WHERE id = :id")
+    suspend fun updateCover(id: String, coverPath: String?, updatedAt: Long)
+
     @Query("UPDATE books SET updated_at = :updatedAt WHERE id = :id")
     suspend fun touch(id: String, updatedAt: Long)
 
