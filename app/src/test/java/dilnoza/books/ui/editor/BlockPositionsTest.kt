@@ -1,5 +1,7 @@
 package dilnoza.books.ui.editor
 
+import dilnoza.books.domain.model.Block
+import dilnoza.books.domain.model.BlockContent
 import dilnoza.books.domain.model.POSITION_STEP
 import dilnoza.books.domain.model.RichText
 import org.junit.Assert.assertEquals
@@ -35,5 +37,29 @@ class BlockPositionsTest {
             mapOf("a" to POSITION_STEP, "p" to 2 * POSITION_STEP, "b" to 3 * POSITION_STEP),
             positions(blocks, blocks.map { it.id }.toSet()),
         )
+    }
+
+    private fun stored(vararg blocks: Pair<String, Int>) =
+        blocks.map { (id, position) -> Block(id, "c1", position, BlockContent.Paragraph(RichText(id))) }
+
+    @Test
+    fun `a picture saved on its own goes right after its stored neighbour`() {
+        val stored = stored("a" to 1024, "b" to 2048, "c" to 3072)
+
+        assertEquals(1536, positionAmong(stored, before = listOf("a"), after = listOf("b", "c")))
+    }
+
+    @Test
+    fun `neighbours deleted since are skipped`() {
+        val stored = stored("a" to 1024, "c" to 2048)
+
+        assertEquals(1536, positionAmong(stored, before = listOf("b", "a"), after = listOf("c")))
+        assertEquals(0, positionAmong(stored, before = listOf("x"), after = listOf("y", "a")))
+    }
+
+    @Test
+    fun `with no stored neighbour the picture goes last`() {
+        assertEquals(3072, positionAmong(stored("a" to 1024, "b" to 2048), before = listOf("x"), after = emptyList()))
+        assertEquals(POSITION_STEP, positionAmong(emptyList(), before = emptyList(), after = emptyList()))
     }
 }

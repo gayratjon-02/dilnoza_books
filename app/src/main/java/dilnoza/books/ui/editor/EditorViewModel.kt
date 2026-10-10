@@ -17,6 +17,7 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dilnoza.books.core.di.ApplicationScope
 import dilnoza.books.data.files.ImageStore
+import dilnoza.books.domain.model.Block
 import dilnoza.books.domain.model.BlockContent
 import dilnoza.books.domain.model.RichText
 import dilnoza.books.domain.model.SpanStyleData
@@ -97,6 +98,8 @@ class EditorViewModel @Inject constructor(
     // Pictures still being imported, and those already stored, so undo can bring a placeholder back right.
     private val importingImages = mutableSetOf<String>()
     private val importedImages = mutableMapOf<String, ImageState>()
+    // Set on the main thread once the screen is gone; imports finishing later must not save the stale blocks.
+    private var cleared = false
     var searchOpen by mutableStateOf(false)
         private set
     var searchQuery by mutableStateOf("")
@@ -491,21 +494,52 @@ class EditorViewModel @Inject constructor(
         placeholders.zip(sources).forEach { (block, source) ->
             appScope.launch {
                 val stored = runCatching { imageStore.import(book, source) }
-                withContext(Dispatchers.Main.immediate) {
+                val orphan = withContext(Dispatchers.Main.immediate) {
                     importingImages.remove(block.id)
                     // Undo may have replaced the placeholder with another instance of the same block.
                     val current = blocks.firstOrNull { it.id == block.id }
-                    stored.onSuccess { image ->
-                        val state = ImageState(image.fileName, image.width, image.height)
-                        importedImages[block.id] = state
-                        current?.image = state
-                        markStructureDirty()
-                    }.onFailure {
-                        current?.let(blocks::remove)
-                        message = EditorMessage.IMAGE_FAILED
+                    val state = stored.getOrNull()?.let { ImageState(it.fileName, it.width, it.height) }
+                    when {
+                        state == null -> {
+                            current?.let(blocks::remove)
+                            message = EditorMessage.IMAGE_FAILED
+                            null
+                        }
+                        // Another editor may have opened the chapter since: this one's other blocks are stale.
+                        cleared -> current?.let {
+                            it.image = state
+                            orphanImage(it)
+                        }
+                        else -> {
+                            importedImages[block.id] = state
+                            current?.image = state
+                            markStructureDirty()
+                            null
+                        }
                     }
                 }
+                orphan?.let { saveOrphanImage(it) }
             }
+        }
+    }
+
+    /** [block], which now holds its imported picture, with the saved blocks around it, nearest first. */
+    private fun orphanImage(block: EditorBlock): OrphanImage {
+        val saved = blocks.filter { !it.isPendingImage }.map { it.id }
+        val index = saved.indexOf(block.id)
+        return OrphanImage(
+            block = block.toBlock(chapterId, position = 0),
+            before = saved.subList(0, index).asReversed(),
+            after = saved.subList(index + 1, saved.size),
+        )
+    }
+
+    /** Stores only the picture, between its neighbours as they are stored now, leaving every other block as it is. */
+    private suspend fun saveOrphanImage(orphan: OrphanImage) {
+        runCatching {
+            val stored = blockRepository.getBlocks(chapterId)
+            val position = positionAmong(stored, orphan.before, orphan.after)
+            blockRepository.saveChapter(chapterId, null, listOf(orphan.block.copy(position = position)), emptyList())
         }
     }
 
@@ -714,6 +748,7 @@ class EditorViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        cleared = true
         autoSaver.flushInBackground()
     }
 
@@ -790,6 +825,8 @@ class EditorViewModel @Inject constructor(
     private data class CellTyping(val blockId: String, val cell: CellKey)
 
     private data class ImageResize(val blockId: String)
+
+    private class OrphanImage(val block: Block, val before: List<String>, val after: List<String>)
 
     private companion object {
         val WHITESPACE = Regex("\\s+")
