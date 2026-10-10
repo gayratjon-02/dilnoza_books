@@ -88,6 +88,7 @@ fun BookScreen(
     BookContent(
         book = book,
         chapters = state.chapters,
+        pageRanges = state.pageRanges,
         onAction = viewModel::onAction,
         onBack = onBack,
         onOpenChapter = onOpenChapter,
@@ -99,6 +100,7 @@ fun BookScreen(
 private fun BookContent(
     book: Book,
     chapters: List<Chapter>,
+    pageRanges: Map<String, IntRange>,
     onAction: (BookAction) -> Unit,
     onBack: () -> Unit,
     onOpenChapter: (String) -> Unit,
@@ -155,6 +157,7 @@ private fun BookContent(
                 ChapterRow(
                     number = index + 1,
                     chapter = chapter,
+                    pages = pageRanges[chapter.id],
                     canMoveUp = index > 0,
                     canMoveDown = index < chapters.lastIndex,
                     onClick = { onOpenChapter(chapter.id) },
@@ -240,6 +243,7 @@ private fun BookHeader(book: Book, onPageSize: (PageSize) -> Unit) {
 private fun ChapterRow(
     number: Int,
     chapter: Chapter,
+    pages: IntRange?,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
     onClick: () -> Unit,
@@ -269,6 +273,17 @@ private fun ChapterRow(
             }
         },
         headlineContent = { Text(chapter.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        supportingContent = pages?.let { range ->
+            {
+                Text(
+                    if (range.first == range.last) {
+                        stringResource(R.string.chapter_page_single, range.first)
+                    } else {
+                        stringResource(R.string.chapter_page_range, range.first, range.last)
+                    },
+                )
+            }
+        },
         trailingContent = {
             Box {
                 IconButton(onClick = { menuOpen = true }) {

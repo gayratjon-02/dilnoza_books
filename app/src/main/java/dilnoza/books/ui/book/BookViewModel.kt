@@ -10,7 +10,10 @@ import dilnoza.books.domain.model.Chapter
 import dilnoza.books.domain.model.PageSize
 import dilnoza.books.domain.repository.BookRepository
 import dilnoza.books.domain.repository.ChapterRepository
+import dilnoza.books.editor.layout.PageSpec
+import dilnoza.books.ui.editor.page.BookPageCounter
 import dilnoza.books.ui.navigation.BookRoute
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -25,6 +29,8 @@ data class BookUiState(
     val loading: Boolean = true,
     val book: Book? = null,
     val chapters: List<Chapter> = emptyList(),
+    /** Pages each chapter occupies in the whole book, once counted. */
+    val pageRanges: Map<String, IntRange> = emptyMap(),
 )
 
 sealed interface BookAction {
@@ -40,11 +46,13 @@ sealed interface BookEvent {
     data class OpenChapter(val chapterId: String) : BookEvent
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class BookViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val books: BookRepository,
     private val chapters: ChapterRepository,
+    private val pageCounter: BookPageCounter,
 ) : ViewModel() {
 
     private val bookId = savedStateHandle.toRoute<BookRoute>().bookId
@@ -53,6 +61,17 @@ class BookViewModel @Inject constructor(
         books.observeBook(bookId),
         chapters.observeChapters(bookId),
     ) { book, chapters -> BookUiState(loading = false, book = book, chapters = chapters) }
+        .transformLatest { state ->
+            emit(state)
+            val book = state.book ?: return@transformLatest
+            // Counting lays every chapter out, so the list shows first and the page ranges follow.
+            val counts = pageCounter.pageCounts(state.chapters, PageSpec.of(book.pageSize, book.marginMm))
+            var next = 1
+            val ranges = state.chapters.zip(counts).associate { (chapter, pages) ->
+                (chapter.id to (next until next + pages)).also { next += pages }
+            }
+            emit(state.copy(pageRanges = ranges))
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BookUiState())
 
     private val _events = Channel<BookEvent>(Channel.BUFFERED)

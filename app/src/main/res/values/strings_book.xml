@@ -12,4 +12,6 @@
     <string name="page_size_a5">A5 (book)</string>
     <string name="page_size_a4">A4</string>
     <string name="page_size_letter">Letter</string>
+    <string name="chapter_page_single">Page %1$d</string>
+    <string name="chapter_page_range">Pages %1$d–%2$d</string>
 </resources>
