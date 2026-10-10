@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -199,16 +200,22 @@ fun EditorScreen(
         if (request == null) return@LaunchedEffect
         val target = viewModel.blocks.firstOrNull { it.id == request.blockId }
         // A block added in this frame has no field yet; focus moves as soon as it has one, so that
-        // keys typed right after Enter land in the new block.
-        if (target != null && !target.focusRequester.tryFocus()) {
-            withFrameNanos { }
-            val index = viewModel.blocks.indexOf(target)
-            val visible = listState.layoutInfo.visibleItemsInfo.any { it.key == request.blockId }
-            // +1 skips the chapter title item.
-            if (!visible && index >= 0) listState.scrollToItem(index + 1)
-            if (!target.focusRequester.tryFocus()) {
+        // keys typed right after Enter land in the new block. A block just below the visible part is
+        // scrolled up a little at a time rather than jumped to the top.
+        if (target != null) {
+            for (attempt in 0 until MAX_FOCUS_FRAMES) {
+                if (target.focusRequester.tryFocus()) break
                 withFrameNanos { }
-                target.focusRequester.tryFocus()
+                // +1 skips the chapter title item.
+                val item = viewModel.blocks.indexOf(target) + 1
+                val info = listState.layoutInfo
+                if (item == 0 || info.visibleItemsInfo.any { it.index == item }) continue
+                val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+                if (item > last && item - last <= 2) {
+                    listState.scrollBy((info.viewportEndOffset - info.viewportStartOffset) / 3f)
+                } else {
+                    listState.scrollToItem(item)
+                }
             }
         }
         viewModel.onFocusRequestHandled()
@@ -703,6 +710,7 @@ private fun dropIndex(listState: LazyListState, viewModel: EditorViewModel, y: F
 }
 
 private const val MAX_PICKED_IMAGES = 10
+private const val MAX_FOCUS_FRAMES = 6
 private val LIST_INDENT = 24.dp
 private const val LINE_HEIGHT_FACTOR = 1.4f
 private val LIST_MARKER_WIDTH = 28.dp
