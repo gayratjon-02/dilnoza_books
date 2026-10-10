@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -410,10 +412,20 @@ fun EditorScreen(
                     val deskWidthPt = viewModel.pageSpec.widthPt + 2 * DESK_PADDING_PT
                     val scale = constraints.maxWidth / deskWidthPt * viewModel.zoom
                     SideEffect { pageScale = scale }
-                    val deskWidth = with(LocalDensity.current) { (deskWidthPt * scale).toDp() }
+                    // Zooming out stops where a whole page is in view. The keyboard does not count: the
+                    // smallest zoom must not jump while typing.
+                    val screenDensity = LocalDensity.current
+                    val keyboardPx = (WindowInsets.ime.getBottom(screenDensity) - WindowInsets.navigationBars.getBottom(screenDensity))
+                        .coerceAtLeast(0)
+                    val deskHeightPt = viewModel.pageSpec.heightPt + 2 * DESK_PADDING_PT
+                    val fitZoom = (constraints.maxHeight + keyboardPx) / (deskHeightPt * constraints.maxWidth / deskWidthPt)
+                    SideEffect { viewModel.setPageFitZoom(fitZoom) }
+                    val deskWidth = with(screenDensity) { (deskWidthPt * scale).toDp() }
                     PointSpace(
                         scale = scale,
                         modifier = Modifier
+                            // Narrower than the screen when zoomed out: the pages stay in the middle.
+                            .align(Alignment.TopCenter)
                             .fillMaxHeight()
                             .horizontalScroll(rememberScrollState(), enabled = viewModel.zoom > 1f)
                             .width(deskWidth),

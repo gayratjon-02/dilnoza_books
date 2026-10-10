@@ -518,20 +518,33 @@ class EditorViewModel @Inject constructor(
         focusRequest = FocusRequest(last.id)
     }
 
+    /**
+     * Smallest zoom: the whole page in view when 100% (page fits the width) shows less, as in landscape
+     * or on a tablet; never below [ABSOLUTE_MIN_ZOOM] and never above 100%.
+     */
+    var minZoom by mutableFloatStateOf(1f)
+        private set
+
     val canZoomIn: Boolean get() = zoom < MAX_ZOOM - ZOOM_EPSILON
-    val canZoomOut: Boolean get() = zoom > MIN_ZOOM + ZOOM_EPSILON
+    val canZoomOut: Boolean get() = zoom > minZoom + ZOOM_EPSILON
+
+    /** The screen reports the zoom at which a whole page fits; the current zoom is left as it is. */
+    fun setPageFitZoom(fit: Float) {
+        minZoom = fit.coerceIn(ABSOLUTE_MIN_ZOOM, 1f)
+    }
 
     fun zoomIn() {
         zoom = ZOOM_STEPS.firstOrNull { it > zoom + ZOOM_EPSILON } ?: MAX_ZOOM
     }
 
     fun zoomOut() {
-        zoom = ZOOM_STEPS.lastOrNull { it < zoom - ZOOM_EPSILON } ?: MIN_ZOOM
+        zoom = (ZOOM_STEPS.lastOrNull { it < zoom - ZOOM_EPSILON } ?: minZoom).coerceAtLeast(minZoom)
     }
 
     /** Pinch: continuous zoom by [factor], kept within the supported range. */
     fun zoomBy(factor: Float) {
-        zoom = (zoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        val low = minOf(minZoom, zoom)
+        zoom = (zoom * factor).coerceIn(low, MAX_ZOOM)
     }
 
     /** Starts a new page after the last block and puts the caret on it. */
@@ -917,7 +930,7 @@ class EditorViewModel @Inject constructor(
         val WHITESPACE = Regex("\\s+")
         const val TITLE_TYPING = "title"
         const val DEFAULT_MARGIN_MM = 20
-        const val MIN_ZOOM = 1f
+        const val ABSOLUTE_MIN_ZOOM = 0.1f
         const val MAX_ZOOM = 2.5f
         const val ZOOM_EPSILON = 0.01f
         val ZOOM_STEPS = listOf(1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f)

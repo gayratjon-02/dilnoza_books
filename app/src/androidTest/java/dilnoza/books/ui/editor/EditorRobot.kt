@@ -145,7 +145,9 @@ class EditorRobot(private val rule: MainRule) {
     fun pageHeightOnScreen(): Float {
         val a5Width = 148f / 25.4f * 72f
         val a5Height = 210f / 25.4f * 72f
-        val scale = pageList().boundsInRoot.width / (a5Width + 2 * DESK_PADDING_PT) * zoomPercent() / 100f
+        // Zoomed in, the list is cut to the screen width; zoomed out, it is the narrower page itself.
+        val zoom = zoomPercent() / 100f
+        val scale = pageList().boundsInRoot.width / (a5Width + 2 * DESK_PADDING_PT) * maxOf(zoom, 1f)
         return a5Height * scale
     }
 

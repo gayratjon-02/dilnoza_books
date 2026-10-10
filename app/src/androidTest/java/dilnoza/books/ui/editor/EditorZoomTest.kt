@@ -2,6 +2,7 @@ package dilnoza.books.ui.editor
 
 import android.graphics.Rect
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToKeyAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToKey
@@ -98,6 +99,40 @@ class EditorZoomTest {
         assertEquals(100, robot.zoomPercent())
         assertFalse("zoom out must be disabled at 100%", robot.zoomOutButton().isEnabled())
         assertTrue(robot.zoomInButton().isEnabled())
+    }
+
+    @Test
+    fun landscapeZoomsOutUntilAWholePageIsInView() {
+        robot.hideKeyboard()
+        robot.device.setOrientationLandscape()
+        try {
+            robot.waitFor { robot.nodes(hasContentDescription(robot.str(R.string.editor_zoom_out))).isNotEmpty() }
+            rule.waitForIdle()
+            assertEquals(100, robot.zoomPercent())
+            assertTrue("in landscape a page does not fit at 100%, so zoom out must be enabled", robot.zoomOutButton().isEnabled())
+            repeat(MAX_CLICKS) {
+                val zoomOut = robot.zoomOutButton()
+                if (!zoomOut.isEnabled()) return@repeat
+                robot.click(zoomOut)
+            }
+            val zoom = robot.zoomPercent()
+            assertTrue("zoom $zoom% should be below 100%", zoom < 100)
+            val list = robot.pageList().boundsInRoot
+            robot.screenshot("zoom_landscape_fit")
+            assertTrue(
+                "a whole page (${robot.pageHeightOnScreen()} px) should fit the list (${list.height} px) at $zoom%",
+                robot.pageHeightOnScreen() <= list.height + 2f,
+            )
+            val screenWidth = rule.activity.window.decorView.width
+            assertEquals("the narrower page should be centred", screenWidth / 2f, list.center.x, screenWidth * 0.02f)
+
+            robot.click(robot.zoomInButton())
+            assertEquals(100, robot.zoomPercent())
+        } finally {
+            robot.device.setOrientationNatural()
+            robot.device.unfreezeRotation()
+            rule.waitForIdle()
+        }
     }
 
     @Test
