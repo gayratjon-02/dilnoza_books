@@ -11,7 +11,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import android.content.Context
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.font.createFontFamilyResolver
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.SavedStateHandle
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dilnoza.books.editor.layout.PageMeasurer
+import dilnoza.books.ui.editor.page.BlockLayoutCache
+import dilnoza.books.ui.editor.page.layoutContent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
@@ -70,6 +78,7 @@ class EditorViewModel @Inject constructor(
     private val pageCounter: BookPageCounter,
     private val imageStore: ImageStore,
     @ApplicationScope private val appScope: CoroutineScope,
+    @ApplicationContext context: Context,
 ) : ViewModel() {
 
     private val chapterId = savedStateHandle.toRoute<EditorRoute>().chapterId
@@ -82,6 +91,14 @@ class EditorViewModel @Inject constructor(
         private set
     var pageSpec by mutableStateOf(PageSpec.of(PageSize.A5, DEFAULT_MARGIN_MM))
         private set
+
+    /** Measured blocks for the pagination; kept here so rotation does not measure the chapter again. */
+    val layoutCache: BlockLayoutCache = createFontFamilyResolver(context).let { fonts ->
+        BlockLayoutCache { spec ->
+            val textMeasurer = TextMeasurer(fonts, PageMeasurer.PointDensity, LayoutDirection.Ltr, cacheSize = 32)
+            PageMeasurer(textMeasurer, spec) { it.toAnnotatedString() }
+        }
+    }
 
     /** Page magnification over "page fits the screen width"; line breaks never change with it. */
     var zoom by mutableFloatStateOf(1f)
@@ -194,9 +211,11 @@ class EditorViewModel @Inject constructor(
             return
         }
         bookId = chapter.bookId
+        val firstBook = bookRepository.observeBook(chapter.bookId).filterNotNull().first()
         viewModelScope.launch {
             bookRepository.observeBook(chapter.bookId).filterNotNull().collect { book ->
                 val spec = PageSpec.of(book.pageSize, book.marginMm)
+                if (loaded && spec != pageSpec) primeLayout(spec)
                 pageSpec = spec
                 // Pages are numbered across the book: this chapter starts after all earlier ones.
                 val earlier = chapterRepository.observeChapters(chapter.bookId).first().takeWhile { it.id != chapterId }
@@ -211,7 +230,17 @@ class EditorViewModel @Inject constructor(
             markDirty(first.id)
             focusRequest = FocusRequest(first.id)
         }
+        val spec = PageSpec.of(firstBook.pageSize, firstBook.marginMm)
+        primeLayout(spec)
+        pageSpec = spec
         loaded = true
+    }
+
+    /** Measures the whole chapter for [spec] off the main thread, before the screen paginates it. */
+    private suspend fun primeLayout(spec: PageSpec) {
+        val titleText = title.text
+        val contents = blocks.map { it.id to it.layoutContent() }
+        withContext(Dispatchers.Default) { layoutCache.prime(spec, titleText, contents) }
     }
 
     fun onTitleChange(value: TextFieldValue) {

@@ -351,6 +351,7 @@ fun EditorScreen(
                     title = { viewModel.title.text },
                     blocks = viewModel.blocks,
                     spec = viewModel.pageSpec,
+                    cache = viewModel.layoutCache,
                     // ImageBlockView shows the caption field of the selected image even when it is empty.
                     captionShownFor = { viewModel.focusedBlock?.takeIf { it.kind == BlockKind.IMAGE }?.id },
                 )
