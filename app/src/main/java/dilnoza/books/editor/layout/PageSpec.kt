@@ -1,6 +1,7 @@
 package dilnoza.books.editor.layout
 
 import dilnoza.books.domain.model.PageSize
+import kotlin.math.floor
 
 /**
  * Physical page in typographic points (1/72 inch). The editor, the paginator and the PDF export
@@ -13,6 +14,13 @@ data class PageSpec(
 ) {
     val contentWidthPt: Float get() = widthPt - 2 * marginPt
     val contentHeightPt: Float get() = heightPt - 2 * marginPt
+
+    /**
+     * The text column in whole points. Layout works in whole pixels (1px == 1pt), so lines are both
+     * measured and drawn at exactly this width; a fractional width would be rounded differently on
+     * each side and wrap some lines one word earlier on screen than on the planned page.
+     */
+    val columnWidthPt: Int get() = floor(contentWidthPt + WIDTH_EPSILON).toInt()
 
     companion object {
         const val MIN_MARGIN_MM = 10
@@ -29,6 +37,7 @@ data class PageSpec(
 
         fun mmToPt(mm: Float): Float = mm / MM_PER_INCH * POINTS_PER_INCH
 
+        private const val WIDTH_EPSILON = 0.001f
         private const val POINTS_PER_INCH = 72f
         private const val MM_PER_INCH = 25.4f
     }

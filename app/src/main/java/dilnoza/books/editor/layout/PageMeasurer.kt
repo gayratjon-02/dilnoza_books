@@ -24,24 +24,26 @@ class PageMeasurer(
 ) {
     fun measure(blocks: List<Block>): List<FlowItem> = blocks.map { measure(it.id, it.content) }
 
+    private val column = spec.columnWidthPt
+
     fun measureTitle(title: String): FlowItem.Text =
-        text(TITLE_ID, RichText(title), PageStyles.title(), spec.contentWidthPt)
+        text(TITLE_ID, RichText(title), PageStyles.title(), column)
             .copy(spaceAfterPt = PageTypography.TITLE_SPACE_AFTER_PT, keepWithNext = true)
 
     fun measure(id: String, content: BlockContent): FlowItem = when (content) {
-        is BlockContent.Paragraph -> text(id, content.text, textStyle(content), spec.contentWidthPt)
+        is BlockContent.Paragraph -> text(id, content.text, textStyle(content), column)
             .copy(spaceAfterPt = PageTypography.PARAGRAPH_SPACING_PT)
 
-        is BlockContent.Heading -> text(id, content.text, textStyle(content), spec.contentWidthPt).copy(
+        is BlockContent.Heading -> text(id, content.text, textStyle(content), column).copy(
             spaceBeforePt = PageTypography.HEADING_SPACE_BEFORE_PT,
             spaceAfterPt = PageTypography.HEADING_SPACE_AFTER_PT,
             keepWithNext = true,
         )
 
-        is BlockContent.ListItem -> text(id, content.text, textStyle(content), spec.contentWidthPt - listInset(content.indent))
+        is BlockContent.ListItem -> text(id, content.text, textStyle(content), column - listInset(content.indent).toInt())
             .copy(spaceAfterPt = PageStyles.LIST_ITEM_GAP_PT)
 
-        is BlockContent.Quote -> text(id, content.text, textStyle(content), spec.contentWidthPt - PageStyles.QUOTE_INDENT_PT)
+        is BlockContent.Quote -> text(id, content.text, textStyle(content), column - PageStyles.QUOTE_INDENT_PT.toInt())
             .copy(spaceBeforePt = PageTypography.PARAGRAPH_SPACING_PT, spaceAfterPt = PageTypography.PARAGRAPH_SPACING_PT)
 
         is BlockContent.Image -> FlowItem.Box(
@@ -66,8 +68,8 @@ class PageMeasurer(
 
     /** Picture height at its width share of the content box, plus the caption below it. */
     fun imageHeight(image: BlockContent.Image): Float {
-        val width = spec.contentWidthPt * image.widthPercent / 100f
-        val pictureHeight = width * image.height / max(1, image.width)
+        val width = PageStyles.imageWidthPt(column, image.widthPercent)
+        val pictureHeight = PageStyles.imageHeightPt(width, image.width, image.height).toFloat()
         if (image.caption.isBlank()) return pictureHeight
         val caption = layout(AnnotatedString(image.caption), PageStyles.caption(), width)
         return pictureHeight + PageStyles.CAPTION_GAP_PT + caption.size.height
@@ -76,7 +78,7 @@ class PageMeasurer(
     /** Columns share the content width equally; each row is as tall as its tallest cell. */
     fun tableHeight(table: BlockContent.Table): Float {
         val columns = max(1, table.rows.maxOfOrNull { it.size } ?: 1)
-        val cellWidth = spec.contentWidthPt / columns - 2 * PageStyles.TABLE_CELL_PADDING_PT
+        val cellWidth = ceil(spec.contentWidthPt / columns - 2 * PageStyles.TABLE_CELL_PADDING_PT).toInt()
         return table.rows.withIndex().sumOf { (index, row) ->
             val style = PageStyles.tableCell(header = table.headerRow && index == 0)
             val tallest = row.maxOfOrNull { layout(styled(it), style, cellWidth).size.height } ?: 0
@@ -84,17 +86,18 @@ class PageMeasurer(
         }.toFloat()
     }
 
-    private fun text(id: String, rich: RichText, style: TextStyle, widthPt: Float): FlowItem.Text {
+    private fun text(id: String, rich: RichText, style: TextStyle, widthPt: Int): FlowItem.Text {
         val result = layout(styled(rich), style, widthPt)
         val lines = (0 until result.lineCount).map { result.getLineBottom(it) - result.getLineTop(it) }
         return FlowItem.Text(id, lines, lineStarts = (0 until result.lineCount).map(result::getLineStart))
     }
 
-    private fun layout(text: AnnotatedString, style: TextStyle, widthPt: Float): TextLayoutResult =
+    /** [widthPt] is whole points, the same width the editor gives the text on screen. */
+    private fun layout(text: AnnotatedString, style: TextStyle, widthPt: Int): TextLayoutResult =
         textMeasurer.measure(
             text = text,
             style = style,
-            constraints = Constraints(maxWidth = max(1, ceil(widthPt).toInt())),
+            constraints = Constraints(maxWidth = max(1, widthPt)),
         )
 
     companion object {

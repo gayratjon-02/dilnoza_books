@@ -12,6 +12,7 @@ import dilnoza.books.core.ui.theme.BookSerif
 import dilnoza.books.domain.model.BlockContent
 import dilnoza.books.domain.model.RichText
 import dilnoza.books.domain.model.TextAlignment
+import kotlin.math.roundToInt
 
 /**
  * Text styles and block geometry of page content. Sizes are points rendered as sp at a density where
@@ -29,6 +30,13 @@ object PageStyles {
     const val CAPTION_GAP_PT = 4f
     const val BLOCK_GAP_PT = 8f
     const val LIST_ITEM_GAP_PT = 2f
+
+    /** Width of a picture shown at [percent] of a [columnWidthPt] column, in whole points. */
+    fun imageWidthPt(columnWidthPt: Int, percent: Int): Int = (columnWidthPt * percent / 100).coerceAtLeast(1)
+
+    /** Height of a picture of [widthPt] with the image's aspect ratio, rounded as the layout rounds it. */
+    fun imageHeightPt(widthPt: Int, imageWidth: Int, imageHeight: Int): Int =
+        (widthPt / (imageWidth.toFloat() / imageHeight.coerceAtLeast(1))).roundToInt().coerceAtLeast(1)
 
     private val trimNone = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None)
 

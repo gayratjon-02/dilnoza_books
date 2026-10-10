@@ -2,6 +2,7 @@ package dilnoza.books.editor.layout
 
 import dilnoza.books.domain.model.PageSize
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PageSpecTest {
@@ -35,6 +36,31 @@ class PageSpecTest {
         assertEquals(spec.widthPt - 2 * spec.marginPt, spec.contentWidthPt, delta)
         assertEquals(306.14f, spec.contentWidthPt, delta)
         assertEquals(481.89f, spec.contentHeightPt, delta)
+    }
+
+    @Test
+    fun `text column is the content width rounded down to whole points`() {
+        // 306.14 pt: measuring at 307 but drawing at 306 would wrap lines differently.
+        assertEquals(306, PageSpec.of(PageSize.A5, marginMm = 20).columnWidthPt)
+        // 334.48 pt and 538.58 pt: rounding up or to nearest would both disagree with one side.
+        assertEquals(334, PageSpec.of(PageSize.A5, marginMm = 15).columnWidthPt)
+        assertEquals(538, PageSpec.of(PageSize.A4, marginMm = 10).columnWidthPt)
+        for (size in PageSize.entries) {
+            for (margin in PageSpec.MIN_MARGIN_MM..PageSpec.MAX_MARGIN_MM) {
+                val spec = PageSpec.of(size, margin)
+                assertTrue(spec.columnWidthPt <= spec.contentWidthPt + 0.001f)
+                assertTrue(spec.columnWidthPt > spec.contentWidthPt - 1f)
+            }
+        }
+    }
+
+    @Test
+    fun `pictures get whole point sizes`() {
+        assertEquals(76, PageStyles.imageWidthPt(306, 25))
+        assertEquals(306, PageStyles.imageWidthPt(306, 100))
+        // 306 wide at 4:3 is 229.5 tall, rounded as the layout's aspect ratio rounds it.
+        assertEquals(230, PageStyles.imageHeightPt(306, 400, 300))
+        assertEquals(612, PageStyles.imageHeightPt(306, 100, 200))
     }
 
     @Test

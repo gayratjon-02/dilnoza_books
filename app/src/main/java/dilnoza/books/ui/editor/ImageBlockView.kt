@@ -72,7 +72,8 @@ fun ImageBlockView(
         modifier = Modifier.fillMaxWidth(),
     ) {
         val fullWidthPx = constraints.maxWidth.toFloat()
-        val imageWidth = maxWidth * (image.widthPercent / 100f)
+        // Whole points, as the paginator measures the picture and its caption.
+        val imageWidth = with(LocalDensity.current) { PageStyles.imageWidthPt(constraints.maxWidth, image.widthPercent).toDp() }
 
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = horizontal) {
             Box(

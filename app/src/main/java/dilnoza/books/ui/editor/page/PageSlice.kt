@@ -51,7 +51,7 @@ fun PageSlice(
         Box(
             modifier = Modifier
                 .padding(start = spec.marginPt.dp, top = contentTopPt.dp)
-                .width(spec.contentWidthPt.dp)
+                .width(spec.columnWidthPt.dp)
                 .then(if (contentHeightPt != null) Modifier.requiredHeight(contentHeightPt.dp) else Modifier),
         ) {
             content()
