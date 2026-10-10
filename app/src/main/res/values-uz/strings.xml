@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_title">Kitoblarim</string>
+    <string name="library_empty_title">Hali kitob yoʻq</string>
+    <string name="library_empty_body">Birinchi kitobingizni yozishni boshlang</string>
+</resources>

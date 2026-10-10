@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_title">Мои книги</string>
+    <string name="library_empty_title">Пока нет книг</string>
+    <string name="library_empty_body">Начните писать свою первую книгу</string>
+</resources>
