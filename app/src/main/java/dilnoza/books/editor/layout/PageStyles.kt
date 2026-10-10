@@ -3,6 +3,8 @@ package dilnoza.books.editor.layout
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
@@ -36,6 +38,9 @@ object PageStyles {
         lineHeight = (sizePt * PageTypography.LINE_HEIGHT).sp,
         lineHeightStyle = trimNone,
         textAlign = align.toTextAlign(),
+        // Greedy breaking: splitting a paragraph between pages must not move the lines before the split.
+        lineBreak = LineBreak.Simple,
+        hyphens = Hyphens.None,
     )
 
     fun title() = base(PageTypography.TITLE_SIZE_PT, TextAlignment.START).copy(fontWeight = FontWeight.Bold)
