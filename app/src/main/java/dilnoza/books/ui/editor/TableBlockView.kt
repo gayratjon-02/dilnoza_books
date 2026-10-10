@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
+import dilnoza.books.editor.layout.PageStyles
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,14 +57,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import dilnoza.books.R
 import dilnoza.books.domain.model.RichText
 import dilnoza.books.editor.richtext.RichTextEditor
@@ -89,15 +86,11 @@ fun TableBlockView(
     val headerBackground = MaterialTheme.colorScheme.surfaceContainerHighest
     val description = stringResource(R.string.editor_table)
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         val density = LocalDensity.current
-        // Whole pixels, so columns that fill the page add up to exactly its width and nothing scrolls.
-        val columnWidth = with(density) {
-            maxOf((constraints.maxWidth / table.columnKeys.size).toDp(), MIN_COLUMN_WIDTH)
-        }
+        // Columns share the page width equally, exactly as the paginator measures them.
+        val columnWidth = with(density) { (constraints.maxWidth / table.columnKeys.size).toDp() }
         Column(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())
@@ -200,13 +193,7 @@ private fun TableCell(
                 onChange(RichTextEditor.applyTextChange(rich, cleaned.text, cursor = cleaned.selection.end))
             }
         },
-        textStyle = MaterialTheme.typography.bodyLarge.copy(
-            fontFamily = FontFamily.Serif,
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
-            fontWeight = if (header) FontWeight.SemiBold else null,
-            color = MaterialTheme.colorScheme.onSurface,
-        ),
+        textStyle = PageStyles.tableCell(header).copy(color = MaterialTheme.colorScheme.onSurface),
         visualTransformation = transformation,
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
@@ -228,9 +215,7 @@ private fun TableCell(
             .semantics { contentDescription = label },
         decorationBox = { inner ->
             Box(
-                modifier = Modifier
-                    .defaultMinSize(minHeight = 48.dp)
-                    .padding(horizontal = 10.dp, vertical = 12.dp),
+                modifier = Modifier.padding(PageStyles.TABLE_CELL_PADDING_PT.dp),
                 contentAlignment = Alignment.TopStart,
             ) {
                 inner()
@@ -239,6 +224,5 @@ private fun TableCell(
     )
 }
 
-private val MIN_COLUMN_WIDTH = 112.dp
 private val CELL_VIEW_MARGIN = 16.dp
 private const val SETTLE_MILLIS = 60L
