@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="color_red">Qizil</string>
+    <string name="color_orange">Toʻq sariq</string>
+    <string name="color_gold">Tilla rang</string>
+    <string name="color_yellow">Sariq</string>
+    <string name="color_green">Yashil</string>
+    <string name="color_teal">Firuza</string>
+    <string name="color_blue">Koʻk</string>
+    <string name="color_indigo">Toʻq koʻk</string>
+    <string name="color_purple">Binafsha</string>
+    <string name="color_pink">Pushti</string>
+    <string name="color_brown">Jigarrang</string>
+    <string name="color_gray">Kulrang</string>
+    <string name="format_size_small">Kichik</string>
+    <string name="format_size_normal">Oddiy</string>
+    <string name="format_size_large">Katta</string>
+    <string name="format_size_extra_large">Juda katta</string>
+</resources>

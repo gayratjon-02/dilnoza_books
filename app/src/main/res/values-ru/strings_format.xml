@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="color_red">Красный</string>
+    <string name="color_orange">Оранжевый</string>
+    <string name="color_gold">Золотой</string>
+    <string name="color_yellow">Жёлтый</string>
+    <string name="color_green">Зелёный</string>
+    <string name="color_teal">Бирюзовый</string>
+    <string name="color_blue">Синий</string>
+    <string name="color_indigo">Индиго</string>
+    <string name="color_purple">Фиолетовый</string>
+    <string name="color_pink">Розовый</string>
+    <string name="color_brown">Коричневый</string>
+    <string name="color_gray">Серый</string>
+    <string name="format_size_small">Мелкий</string>
+    <string name="format_size_normal">Обычный</string>
+    <string name="format_size_large">Крупный</string>
+    <string name="format_size_extra_large">Очень крупный</string>
+</resources>

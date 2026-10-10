@@ -88,6 +88,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -347,7 +348,20 @@ private fun BlockField(
 ) {
     val kind = block.kind
     val heading = kind == BlockKind.HEADING
-    val style = blockStyle(kind, block.headingLevel).copy(textAlign = block.align.toTextAlign())
+    val rich = block.rich
+    val baseStyle = blockStyle(kind, block.headingLevel)
+    val largestSpanSp = rich.spans.maxOfOrNull { it.style.fontSizeSp ?: 0 } ?: 0
+    val style = baseStyle.copy(
+        textAlign = block.align.toTextAlign(),
+        // The block's fixed line height would clip enlarged text, so grow it to fit the largest run.
+        lineHeight = if (baseStyle.lineHeight.isSp && largestSpanSp * LINE_HEIGHT_FACTOR > baseStyle.lineHeight.value) {
+            (largestSpanSp * LINE_HEIGHT_FACTOR).sp
+        } else {
+            baseStyle.lineHeight
+        },
+    )
+    val darkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val transformation = remember(rich, darkTheme) { RichTextTransformation(rich, darkTheme) }
     val quoteColor = MaterialTheme.colorScheme.primary
     val hint = when (kind) {
         BlockKind.HEADING -> R.string.editor_heading_hint
@@ -386,6 +400,7 @@ private fun BlockField(
             value = block.value,
             onValueChange = onValueChange,
             textStyle = style,
+            visualTransformation = transformation,
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             modifier = Modifier
@@ -614,5 +629,6 @@ private fun dropIndex(listState: LazyListState, viewModel: EditorViewModel, y: F
 
 private const val MAX_PICKED_IMAGES = 10
 private val LIST_INDENT = 24.dp
+private const val LINE_HEIGHT_FACTOR = 1.4f
 private val LIST_MARKER_WIDTH = 28.dp
 private val WIDTH_PRESETS = listOf(25, 50, 75, 100)
