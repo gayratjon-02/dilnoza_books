@@ -231,6 +231,10 @@ class EditorRobot(private val rule: MainRule) {
         val before = focusedField().id
         device.pressEnter()
         waitFor { nodes(hasSetTextAction() and isFocused()).singleOrNull()?.let { it.id != before && fieldText(it).isEmpty() } == true }
+        // The keyboard reconnects to the new field a moment after the focus moves; a key it commits
+        // before that goes to the old field's closed connection and is lost (an Android keyboard race the app cannot see).
+        SystemClock.sleep(IME_RECONNECT_MS)
+        rule.waitForIdle()
     }
 
     fun keyboardShown(): Boolean {
@@ -356,6 +360,7 @@ class EditorRobot(private val rule: MainRule) {
 
     companion object {
         const val DESK_PADDING_PT = 10f
+        const val IME_RECONNECT_MS = 400L
         const val DATABASE_NAME = "dilnoza_books.db"
         const val DEFAULT_TIMEOUT_MS = 10_000L
         const val SAVE_TIMEOUT_MS = 15_000L
