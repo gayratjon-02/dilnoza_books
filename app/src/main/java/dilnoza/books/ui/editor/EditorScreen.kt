@@ -89,6 +89,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -129,6 +130,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -811,10 +813,24 @@ private fun BlockField(
                     .wrapContentWidth(Alignment.End, unbounded = true),
             )
         }
+        val clipboard = LocalClipboard.current
+        val resolver = LocalContext.current.contentResolver
+        val imageClipboard = remember(clipboard, resolver) { ImagePasteClipboard(clipboard, resolver) }
+        CompositionLocalProvider(LocalClipboard provides imageClipboard) {
         BasicTextField(
             value = fieldValue,
-            onValueChange = { field ->
-                when (val edit = fieldEdit(block.value, field)) {
+            onValueChange = { pasted ->
+                val withoutImage = pasted.withoutImagePasteMarker()
+                if (withoutImage != null) {
+                    // Pictures pasted from the clipboard (toolbar or Ctrl+V): they go in as image blocks.
+                    val uris = clipboard.nativeClipboard.primaryClip?.imageUris(resolver).orEmpty()
+                    if (withoutImage.text != fieldValue.text) {
+                        (fieldEdit(block.value, withoutImage) as? FieldEdit.Change)?.let { onValueChange(it.value) }
+                    }
+                    if (uris.isNotEmpty()) onImagesPasted(uris)
+                    return@BasicTextField
+                }
+                when (val edit = fieldEdit(block.value, pasted)) {
                     is FieldEdit.Change -> if (
                         menuOpen &&
                         BlockEditing.insertedLineBreaks(block.value.text, edit.value.text, edit.value.selection.end).isNotEmpty()
@@ -922,6 +938,7 @@ private fun BlockField(
                 }
             },
         )
+        }
     }
 }
 
