@@ -7,6 +7,7 @@ import dilnoza.books.domain.model.SpanStyleData
 import dilnoza.books.domain.model.StyleSpan
 import dilnoza.books.domain.model.TextAlignment
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -274,7 +275,7 @@ class BlockEditingTest {
     }
 
     @Test
-    fun `a table command makes a table with a header and continues in a paragraph`() {
+    fun `a table command makes a table with a header, and continues in a paragraph`() {
         val a = block("a", BlockKind.PARAGRAPH, "/jad")
 
         val edit = editing.insert(a, 0, 4, BlockKind.TABLE)
@@ -283,6 +284,18 @@ class BlockEditingTest {
         assertTrue(a.table!!.headerRow)
         assertEquals(3, a.table!!.grid.rowCount)
         assertEquals(BlockEdit.Structure(focusId = blocks[1].id), edit)
+    }
+
+    @Test
+    fun `a table of the picked size goes below text`() {
+        val a = block("a", BlockKind.PARAGRAPH, "Matn /t")
+
+        editing.insert(a, 5, 7, BlockKind.TABLE, table = TableState.create(2, 4, headerRow = false))
+
+        assertEquals(listOf(BlockKind.PARAGRAPH to "Matn ", BlockKind.TABLE to "", BlockKind.PARAGRAPH to ""), texts)
+        val table = blocks[1].table!!
+        assertEquals(2 to 4, table.grid.rowCount to table.grid.columnCount)
+        assertFalse(table.headerRow)
     }
 
     @Test

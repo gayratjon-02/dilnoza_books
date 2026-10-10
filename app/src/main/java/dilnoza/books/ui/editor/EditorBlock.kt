@@ -15,7 +15,6 @@ import dilnoza.books.domain.model.SpanStyleData
 import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.editor.richtext.RichTextEditor
 import dilnoza.books.editor.richtext.normalized
-import dilnoza.books.editor.table.TableGrid
 
 enum class BlockKind(val isText: Boolean) {
     PARAGRAPH(true),
@@ -27,12 +26,6 @@ enum class BlockKind(val isText: Boolean) {
     PAGE_BREAK(false),
     TABLE(false),
     IMAGE(false),
-}
-
-data class TableState(val grid: TableGrid<RichText>, val headerRow: Boolean = false) {
-    companion object {
-        fun of(content: BlockContent.Table) = TableState(TableGrid(content.rows), content.headerRow)
-    }
 }
 
 /** Image part of an image block; [fileName] is null while the picture is still being imported. */

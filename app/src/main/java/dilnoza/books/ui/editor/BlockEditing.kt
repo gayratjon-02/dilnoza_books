@@ -10,7 +10,6 @@ import dilnoza.books.editor.commands.ShortcutTarget
 import dilnoza.books.editor.richtext.RichTextEditor
 import dilnoza.books.editor.richtext.plus
 import dilnoza.books.editor.richtext.subText
-import dilnoza.books.editor.table.TableGrid
 
 /** What an edit did to the chapter, so the caller knows what to save and where the caret goes. */
 sealed interface BlockEdit {
@@ -57,10 +56,17 @@ class BlockEditing(
 
     /**
      * Replaces [start]..[end] of [block] (the "/" command typed into it) with a block of [kind]. An
-     * emptied block becomes the new kind itself; otherwise the new block goes right after it. After a
-     * non-text block the caret moves to the text that follows it.
+     * emptied block becomes the new kind itself; otherwise the new block goes right after it. A text
+     * block always follows a non-text one; the caret moves there, or into the first cell of a [table].
      */
-    fun insert(block: EditorBlock, start: Int, end: Int, kind: BlockKind, headingLevel: Int = block.headingLevel): BlockEdit {
+    fun insert(
+        block: EditorBlock,
+        start: Int,
+        end: Int,
+        kind: BlockKind,
+        headingLevel: Int = block.headingLevel,
+        table: TableState = TableState.create(TableState.DEFAULT_SIZE, TableState.DEFAULT_SIZE, headerRow = true),
+    ): BlockEdit {
         val length = block.rich.text.length
         val rest = block.rich.subText(0, start) + block.rich.subText(end, length)
         block.setRich(rest, TextRange(start.coerceIn(0, rest.text.length)))
@@ -79,10 +85,11 @@ class BlockEditing(
         } else {
             newBlock(kind, RichText.Empty).also { blocks.add(index + 1, it) }
         }
+        val after = textBlockAfter(target)
         if (kind == BlockKind.TABLE) {
-            target.table = TableState(TableGrid.create(NEW_TABLE_SIZE, NEW_TABLE_SIZE) { _, _ -> RichText.Empty }, headerRow = true)
+            target.table = table
         }
-        return BlockEdit.Structure(focusId = textBlockAfter(target).id)
+        return BlockEdit.Structure(focusId = after.id)
     }
 
     /** Turns a text block into another text kind; headings cannot hold line breaks. */
@@ -114,7 +121,7 @@ class BlockEditing(
     }
 
     /** The empty text block right after [block], adding a paragraph there if there is none. */
-    private fun textBlockAfter(block: EditorBlock): EditorBlock {
+    fun textBlockAfter(block: EditorBlock): EditorBlock {
         val index = blocks.indexOf(block)
         val next = blocks.getOrNull(index + 1)
         if (next != null && next.kind.isText && next.value.text.isEmpty()) return next
@@ -217,7 +224,6 @@ class BlockEditing(
         }
 
     companion object {
-        private const val NEW_TABLE_SIZE = 3
         private val LISTS = setOf(BlockKind.BULLET, BlockKind.NUMBERED)
         private val EXITABLE = LISTS + BlockKind.QUOTE
 
