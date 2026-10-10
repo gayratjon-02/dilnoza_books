@@ -52,6 +52,20 @@ private fun fontFamilyOf(name: String): FontFamily? = when (name) {
 /** Vertical space inserted before the line that starts at [offset] (in the block's text), in points. */
 data class PageGap(val offset: Int, val heightPt: Float)
 
+/** Offsets of the [gaps] that are drawn in a text of [length]: inside it, each once, in order. */
+private fun drawnGapOffsets(gaps: List<PageGap>, length: Int): List<Int> =
+    gaps.map { it.offset }.filter { it in 1 until length }.distinct().sorted()
+
+/**
+ * Where character [offset] of a block's text of [length] sits in the text its field draws, which has
+ * one extra character per page gap before it (see [RichTextTransformation]). Positions in the field's
+ * text layout (caret rectangles, bounding boxes) must be looked up at this offset.
+ */
+fun drawnOffset(offset: Int, gaps: List<PageGap>, length: Int): Int {
+    val r = offset.coerceIn(0, length)
+    return r + drawnGapOffsets(gaps, length).count { it <= r }
+}
+
 /**
  * Draws [rich]'s styles, plus temporary [marks] such as search matches, over the field's plain text and
  * hides the first [hiddenPrefix] characters (the block field's sentinel). [gaps] push the lines that
@@ -76,7 +90,7 @@ class RichTextTransformation(
         val matches = visible.text == rich.text
         val shown = if (matches) styled else visible
         val length = shown.length
-        val offsets = if (matches) gaps.map { it.offset }.filter { it in 1 until length }.distinct().sorted() else emptyList()
+        val offsets = if (matches) drawnGapOffsets(gaps, length) else emptyList()
         if (offsets.isEmpty()) {
             if (prefix == 0) return TransformedText(shown, OffsetMapping.Identity)
             return TransformedText(
@@ -104,10 +118,7 @@ class RichTextTransformation(
         return TransformedText(
             drawn,
             object : OffsetMapping {
-                override fun originalToTransformed(offset: Int): Int {
-                    val r = (offset - prefix).coerceIn(0, length)
-                    return r + offsets.count { it <= r }
-                }
+                override fun originalToTransformed(offset: Int): Int = drawnOffset(offset - prefix, gaps, length)
 
                 override fun transformedToOriginal(offset: Int): Int {
                     val t = offset.coerceIn(0, drawn.length)

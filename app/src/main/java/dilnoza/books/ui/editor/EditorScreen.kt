@@ -155,6 +155,7 @@ import dilnoza.books.editor.layout.PageMeasurer
 import dilnoza.books.editor.layout.PageStyles
 import dilnoza.books.editor.richtext.StyleAttribute
 import dilnoza.books.editor.search.SearchMatch
+import dilnoza.books.ui.editor.page.EditorPages
 import dilnoza.books.ui.editor.page.LocalPageScale
 import dilnoza.books.ui.editor.page.LocalScreenDensity
 import dilnoza.books.ui.editor.page.NormalSize
@@ -243,9 +244,11 @@ fun EditorScreen(
 
     BackHandler(enabled = viewModel.searchOpen) { viewModel.closeSearch() }
 
+    // The latest pagination, for scrolling to search matches from outside the page list.
+    val latestPages = remember { mutableStateOf<EditorPages?>(null) }
     val match = viewModel.currentMatch
     LaunchedEffect(match) {
-        if (match != null) scrollToMatch(listState, viewModel, match, density)
+        if (match != null) scrollToMatch(listState, viewModel, latestPages.value, match, density)
     }
 
     val request = viewModel.focusRequest
@@ -352,6 +355,7 @@ fun EditorScreen(
                     captionShownFor = { viewModel.focusedBlock?.takeIf { it.kind == BlockKind.IMAGE }?.id },
                 )
                 val plan = pages.plan
+                SideEffect { latestPages.value = pages }
                 val numberMeasurer = rememberTextMeasurer()
                 val pageColors = PageColors(
                     paper = MaterialTheme.colorScheme.surfaceContainerLowest,
@@ -795,7 +799,9 @@ private fun BlockField(
                         // The field is drawn scaled inside the page; the popup lives in screen pixels.
                         val density = LocalScreenDensity.current ?: LocalDensity.current
                         val scale = LocalPageScale.current
-                        val offset = slashQuery.slashIndex.coerceIn(0, textLayout.layoutInput.text.length)
+                        // The layout is of the drawn text, which has a character for every page gap.
+                        val offset = drawnOffset(slashQuery.slashIndex, pageGaps, block.value.text.length)
+                            .coerceIn(0, textLayout.layoutInput.text.length)
                         val gap = with(density) { MENU_GAP.toPx() }
                         val caret = textLayout.getCursorRect(offset).let {
                             Rect(it.left * scale, it.top * scale - gap, it.right * scale, it.bottom * scale + gap)
@@ -1004,14 +1010,25 @@ private fun AlignButton(
 }
 
 /** Scrolls so the search [match] sits in the upper part of the view, unless it is already well in view. */
-private suspend fun scrollToMatch(listState: LazyListState, viewModel: EditorViewModel, match: SearchMatch, density: Density) {
+private suspend fun scrollToMatch(
+    listState: LazyListState,
+    viewModel: EditorViewModel,
+    pages: EditorPages?,
+    match: SearchMatch,
+    density: Density,
+) {
     val index = viewModel.blocks.indexOfFirst { it.id == match.unitId }
     if (index < 0) return
     // +1 skips the chapter title item.
     val item = index + 1
-    val layout = viewModel.blocks[index].textLayout
-    val top = layout?.takeIf { match.start < it.layoutInput.text.length }?.getBoundingBox(match.start)?.top?.toInt() ?: 0
-    val bottom = layout?.takeIf { match.start < it.layoutInput.text.length }?.getBoundingBox(match.start)?.bottom?.toInt() ?: 0
+    val block = viewModel.blocks[index]
+    val layout = block.textLayout
+    // The field's layout is of the drawn text (with page gap characters), placed below the block's lead.
+    val start = drawnOffset(match.start, pages?.gapsOf(block.id).orEmpty(), block.value.text.length)
+    val box = layout?.takeIf { start < it.layoutInput.text.length }?.getBoundingBox(start)
+    val lead = pages?.plan?.blocks?.get(block.id)?.leadPt ?: 0f
+    val top = (lead + (box?.top ?: 0f)).toInt()
+    val bottom = (lead + (box?.bottom ?: 0f)).toInt()
     val info = listState.layoutInfo
     val viewport = info.viewportEndOffset - info.viewportStartOffset
     val margin = with(density) { MIN_VISIBLE_BLOCK.roundToPx() }

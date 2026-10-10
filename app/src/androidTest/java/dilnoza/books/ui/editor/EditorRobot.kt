@@ -196,6 +196,16 @@ class EditorRobot(private val rule: MainRule) {
         rule.waitForIdle()
     }
 
+    /** Puts [text] on the clipboard and pastes it at the caret with Ctrl+V. */
+    fun pasteText(text: String) {
+        instrumentation.runOnMainSync {
+            rule.activity.getSystemService(android.content.ClipboardManager::class.java)
+                .setPrimaryClip(android.content.ClipData.newPlainText("text", text))
+        }
+        device.pressKeyCode(android.view.KeyEvent.KEYCODE_V, android.view.KeyEvent.META_CTRL_ON or android.view.KeyEvent.META_CTRL_LEFT_ON)
+        rule.waitForIdle()
+    }
+
     /** Splits the block at the caret and waits until the caret has moved to the new, empty block. */
     fun pressEnter() {
         val before = focusedField().id

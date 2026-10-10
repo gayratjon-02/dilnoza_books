@@ -123,4 +123,34 @@ class RichTextAnnotationsTest {
         assertEquals(1, transformed.offsetMapping.transformedToOriginal(0))
         assertEquals(3, transformed.offsetMapping.transformedToOriginal(2))
     }
+
+    @Test
+    fun `block offsets map past the page gaps drawn before them`() {
+        val text = "Birinchi qator. Ikkinchi qator. Uchinchi qator."
+        val gaps = listOf(PageGap(16, 120f), PageGap(32, 120f))
+
+        assertEquals(0, drawnOffset(0, gaps, text.length))
+        assertEquals(15, drawnOffset(15, gaps, text.length))
+        // A character starting the line after a gap is drawn after the gap's character.
+        assertEquals(17, drawnOffset(16, gaps, text.length))
+        assertEquals(20, drawnOffset(19, gaps, text.length))
+        assertEquals(34, drawnOffset(32, gaps, text.length))
+        assertEquals(text.length + 2, drawnOffset(text.length, gaps, text.length))
+        // Gaps outside the text are not drawn.
+        assertEquals(5, drawnOffset(5, listOf(PageGap(0, 1f), PageGap(99, 1f)), text.length))
+    }
+
+    @Test
+    fun `drawn offsets agree with the field transformation`() {
+        val text = "Birinchi qator. Ikkinchi qator. Uchinchi qator."
+        val gaps = listOf(PageGap(32, 120f), PageGap(16, 120f), PageGap(16, 120f))
+        val transformed = RichTextTransformation(RichText(text), darkTheme = false, hiddenPrefix = 1, gaps = gaps)
+            .filter(AnnotatedString(FIELD_SENTINEL + text))
+
+        for (offset in 0..text.length) {
+            val drawn = drawnOffset(offset, gaps, text.length)
+            assertEquals("offset $offset", transformed.offsetMapping.originalToTransformed(offset + 1), drawn)
+            if (offset < text.length) assertEquals(text[offset], transformed.text.text[drawn])
+        }
+    }
 }
