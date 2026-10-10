@@ -168,6 +168,9 @@ import dilnoza.books.ui.editor.page.PageSlice
 import dilnoza.books.ui.editor.page.PointSpace
 import dilnoza.books.ui.editor.page.layoutContent
 import dilnoza.books.ui.editor.page.rememberEditorPages
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.LayoutCoordinates
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -184,6 +187,10 @@ fun EditorScreen(
     // The block list is laid out in page points (see PointSpace); scroll maths uses the same units.
     val density = PageMeasurer.PointDensity
     var pageScale by remember { mutableFloatStateOf(1f) }
+    var listTopInRoot by remember { mutableFloatStateOf(0f) }
+    var listLeftInRoot by remember { mutableFloatStateOf(0f) }
+    var listRightInRoot by remember { mutableFloatStateOf(0f) }
+    val screenDensity = LocalDensity.current
     val pageScroll = rememberScrollState()
     var viewportWidth by remember { mutableIntStateOf(0) }
     // Screen pixels per page point at 100%.
@@ -197,6 +204,19 @@ fun EditorScreen(
                 pageScroll.scrollTo(target)
             }
         }
+    }
+
+    val scope = rememberCoroutineScope()
+
+    /** Scrolls the zoomed pages sideways so the caret between [left] and [right] (root x) is on screen. */
+    fun revealSideways(left: Float, right: Float) {
+        val margin = with(screenDensity) { CARET_SIDE_MARGIN.toPx() }
+        val delta = when {
+            right > listRightInRoot - margin -> right - (listRightInRoot - margin)
+            left < listLeftInRoot + margin -> left - (listLeftInRoot + margin)
+            else -> return
+        }
+        scope.launch { pageScroll.scrollBy(delta) }
     }
 
     /** Zooms by [factor] keeping the page point under the fingers' [focus] (in list coordinates) where it is. */
@@ -217,7 +237,6 @@ fun EditorScreen(
         pendingPageScroll = x.roundToInt().coerceAtLeast(0)
     }
     val snackbarHostState = remember { SnackbarHostState() }
-    var listTopInRoot by remember { mutableFloatStateOf(0f) }
     var listBottomInRoot by remember { mutableFloatStateOf(0f) }
     var dropHovering by remember { mutableStateOf(false) }
     var pickTableSize by rememberSaveable { mutableStateOf(false) }
@@ -425,6 +444,8 @@ fun EditorScreen(
                         .onGloballyPositioned {
                             listTopInRoot = it.positionInRoot().y
                             listBottomInRoot = listTopInRoot + it.size.height
+                            listLeftInRoot = it.positionInRoot().x
+                            listRightInRoot = listLeftInRoot + it.size.width
                         }
                         .dragAndDropTarget(
                             shouldStartDragAndDrop = { event ->
@@ -452,7 +473,6 @@ fun EditorScreen(
                     }
                     // Zooming out stops where a whole page is in view. The keyboard does not count: the
                     // smallest zoom must not jump while typing.
-                    val screenDensity = LocalDensity.current
                     val keyboardPx = (WindowInsets.ime.getBottom(screenDensity) - WindowInsets.navigationBars.getBottom(screenDensity))
                         .coerceAtLeast(0)
                     val deskHeightPt = viewModel.pageSpec.heightPt + 2 * DESK_PADDING_PT
@@ -537,6 +557,7 @@ fun EditorScreen(
                                             viewModel.insertImages(resolver.openImageSources(uris))
                                         },
                                         pageGaps = pages.gapsOf(block.id),
+                                        onCaretMoved = ::revealSideways,
                                     )
                                 }
                                 }
@@ -699,6 +720,7 @@ private fun BlockField(
     onSlashDismiss: () -> Unit,
     onImagesPasted: (List<Uri>) -> Unit,
     pageGaps: List<PageGap>,
+    onCaretMoved: (left: Float, right: Float) -> Unit,
 ) {
     val kind = block.kind
     val heading = kind == BlockKind.HEADING
@@ -732,6 +754,17 @@ private fun BlockField(
     val menuOpen = commands.isNotEmpty()
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var fieldTop by remember { mutableFloatStateOf(0f) }
+    var fieldCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var focused by remember { mutableStateOf(false) }
+    // The field keeps its caret line in view vertically only; sideways (zoomed in) the screen follows it.
+    LaunchedEffect(focused, block.value.selection, layout) {
+        val textLayout = layout ?: return@LaunchedEffect
+        val coordinates = fieldCoordinates?.takeIf { focused && it.isAttached } ?: return@LaunchedEffect
+        val offset = drawnOffset(block.value.selection.end, pageGaps, block.value.text.length)
+            .coerceIn(0, textLayout.layoutInput.text.length)
+        val caret = textLayout.getCursorRect(offset)
+        onCaretMoved(coordinates.localToRoot(caret.topLeft).x, coordinates.localToRoot(caret.bottomRight).x)
+    }
     val quoteColor = MaterialTheme.colorScheme.primary
     val hint = when (kind) {
         BlockKind.HEADING -> R.string.editor_heading_hint
@@ -798,7 +831,10 @@ private fun BlockField(
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(block.focusRequester)
-                .onFocusChanged { if (it.isFocused) onFocused() }
+                .onFocusChanged {
+                    focused = it.isFocused
+                    if (it.isFocused) onFocused()
+                }
                 .onPreviewKeyEvent { event ->
                     if (menuOpen) {
                         val handled = event.key in MENU_KEYS
@@ -840,7 +876,10 @@ private fun BlockField(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onGloballyPositioned { fieldTop = it.positionInRoot().y },
+                        .onGloballyPositioned {
+                            fieldTop = it.positionInRoot().y
+                            fieldCoordinates = it
+                        },
                     propagateMinConstraints = true,
                 ) {
                     if (block.value.text.isEmpty()) Placeholder(stringResource(hint), style)
@@ -1113,6 +1152,7 @@ private fun dropIndex(listState: LazyListState, viewModel: EditorViewModel, y: F
 private const val MAX_PICKED_IMAGES = 10
 private const val MAX_FOCUS_FRAMES = 6
 private val MIN_VISIBLE_BLOCK = 48.dp
+private val CARET_SIDE_MARGIN = 24.dp
 private val MENU_GAP = 4.dp
 private val MENU_ITEM_HEIGHT = 48.dp
 private val MENU_KEYS = setOf(Key.DirectionDown, Key.DirectionUp, Key.Enter, Key.NumPadEnter, Key.Escape)
