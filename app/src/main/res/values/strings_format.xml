@@ -33,4 +33,6 @@
     <string name="format_highlight_none">No highlight</string>
     <string name="format_close_panel">Close</string>
     <string name="format_heading_short" translatable="false">H%1$d</string>
+    <string name="format_indent">Increase indent</string>
+    <string name="format_outdent">Decrease indent</string>
 </resources>

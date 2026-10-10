@@ -26,4 +26,6 @@
         <item quantity="one">%d ta soʻz</item>
         <item quantity="other">%d ta soʻz</item>
     </plurals>
+    <string name="block_bulleted_list">Belgili roʻyxat</string>
+    <string name="block_numbered_list">Raqamli roʻyxat</string>
 </resources>

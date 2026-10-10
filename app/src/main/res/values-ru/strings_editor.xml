@@ -28,4 +28,6 @@
         <item quantity="many">%d слов</item>
         <item quantity="other">%d слова</item>
     </plurals>
+    <string name="block_bulleted_list">Маркированный список</string>
+    <string name="block_numbered_list">Нумерованный список</string>
 </resources>

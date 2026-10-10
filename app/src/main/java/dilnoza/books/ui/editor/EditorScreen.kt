@@ -288,6 +288,7 @@ fun EditorScreen(
                                 onDeleteAtEnd = { viewModel.onDeleteAtEnd(block) },
                                 onFocused = { viewModel.onBlockFocused(block.id) },
                                 onFormat = viewModel::format,
+                                onIndent = viewModel::indentFocused,
                                 onImagesPasted = { uris ->
                                     viewModel.insertImages(resolver.openImageSources(uris))
                                 },
@@ -329,10 +330,12 @@ fun EditorScreen(
                             state = formatState,
                             kind = focused.kind,
                             headingLevel = focused.headingLevel,
+                            indent = focused.indent,
                             align = focused.align,
                             onFormat = viewModel::format,
                             onAlign = viewModel::setFocusedAlign,
-                            onTextStyle = viewModel::setFocusedTextStyle,
+                            onKind = viewModel::setFocusedKind,
+                            onIndent = viewModel::indentFocused,
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
@@ -385,6 +388,7 @@ private fun BlockField(
     onDeleteAtEnd: () -> Unit,
     onFocused: () -> Unit,
     onFormat: (FormatChange) -> Unit,
+    onIndent: (Int) -> Unit,
     onImagesPasted: (List<Uri>) -> Unit,
 ) {
     val kind = block.kind
@@ -458,6 +462,12 @@ private fun BlockField(
                     val value = block.value
                     if (event.key == Key.Delete && value.selection == TextRange(value.text.length) && event.isPlain()) {
                         if (event.type == KeyEventType.KeyDown) onDeleteAtEnd()
+                        return@onPreviewKeyEvent true
+                    }
+                    if (event.key == Key.Tab && (kind == BlockKind.BULLET || kind == BlockKind.NUMBERED) &&
+                        !event.isCtrlPressed && !event.isAltPressed
+                    ) {
+                        if (event.type == KeyEventType.KeyDown) onIndent(if (event.isShiftPressed) -1 else 1)
                         return@onPreviewKeyEvent true
                     }
                     val change = event.formatShortcut() ?: return@onPreviewKeyEvent false

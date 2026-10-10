@@ -32,4 +32,6 @@
     <string name="format_color_default">Standart rang</string>
     <string name="format_highlight_none">Ajratishsiz</string>
     <string name="format_close_panel">Yopish</string>
+    <string name="format_indent">Chekinishni oshirish</string>
+    <string name="format_outdent">Chekinishni kamaytirish</string>
 </resources>

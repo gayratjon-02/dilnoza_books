@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.outlined.FormatAlignRight
+import androidx.compose.material.icons.automirrored.outlined.FormatIndentDecrease
+import androidx.compose.material.icons.automirrored.outlined.FormatIndentIncrease
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.BorderColor
 import androidx.compose.material.icons.outlined.Check
@@ -79,10 +81,12 @@ fun FormatBar(
     state: FormatState,
     kind: BlockKind,
     headingLevel: Int,
+    indent: Int,
     align: TextAlignment,
     onFormat: (FormatChange) -> Unit,
     onAlign: (TextAlignment) -> Unit,
-    onTextStyle: (headingLevel: Int?) -> Unit,
+    onKind: (kind: BlockKind, headingLevel: Int) -> Unit,
+    onIndent: (delta: Int) -> Unit,
 ) {
     var panel by rememberSaveable { mutableStateOf(FormatPanel.NONE) }
     val close = { panel = FormatPanel.NONE }
@@ -109,9 +113,9 @@ fun FormatBar(
                 VerticalDivider(Modifier.height(24.dp))
             }
             when (shown) {
-                FormatPanel.NONE -> MainRow(state, kind, headingLevel, align, onFormat, open = { panel = it })
-                FormatPanel.TEXT_STYLE -> TextStylePanel(kind, headingLevel) {
-                    onTextStyle(it)
+                FormatPanel.NONE -> MainRow(state, kind, headingLevel, indent, align, onFormat, onIndent, open = { panel = it })
+                FormatPanel.TEXT_STYLE -> TextStylePanel(kind, headingLevel) { newKind, level ->
+                    onKind(newKind, level)
                     close()
                 }
                 FormatPanel.COLOR -> ColorPanel(
@@ -148,8 +152,10 @@ private fun RowScope.MainRow(
     state: FormatState,
     kind: BlockKind,
     headingLevel: Int,
+    indent: Int,
     align: TextAlignment,
     onFormat: (FormatChange) -> Unit,
+    onIndent: (Int) -> Unit,
     open: (FormatPanel) -> Unit,
 ) {
     val textStyleLabel = stringResource(R.string.format_text_style)
@@ -160,13 +166,22 @@ private fun RowScope.MainRow(
         Text(
             text = when (kind) {
                 BlockKind.HEADING -> stringResource(R.string.format_heading_short, headingLevel)
-                BlockKind.BULLET, BlockKind.NUMBERED -> stringResource(R.string.editor_list_hint)
+                BlockKind.BULLET -> stringResource(R.string.block_bulleted_list)
+                BlockKind.NUMBERED -> stringResource(R.string.block_numbered_list)
                 BlockKind.QUOTE -> stringResource(R.string.editor_quote_hint)
                 else -> stringResource(R.string.format_paragraph)
             },
             style = MaterialTheme.typography.labelLarge,
         )
         Icon(Icons.Outlined.ArrowDropDown, contentDescription = null)
+    }
+    if (kind == BlockKind.BULLET || kind == BlockKind.NUMBERED) {
+        IconButton(onClick = { onIndent(-1) }, enabled = indent > 0) {
+            Icon(Icons.AutoMirrored.Outlined.FormatIndentDecrease, contentDescription = stringResource(R.string.format_outdent))
+        }
+        IconButton(onClick = { onIndent(1) }, enabled = indent < BlockContent.ListItem.MAX_INDENT) {
+            Icon(Icons.AutoMirrored.Outlined.FormatIndentIncrease, contentDescription = stringResource(R.string.format_indent))
+        }
     }
     VerticalDivider(Modifier.height(24.dp))
     StyleToggle(Icons.Outlined.FormatBold, R.string.format_bold, state.bold) {
@@ -231,22 +246,35 @@ private fun ColorButton(icon: ImageVector, @StringRes label: Int, argb: Int?, on
 }
 
 @Composable
-private fun TextStylePanel(kind: BlockKind, headingLevel: Int, onSelect: (Int?) -> Unit) {
+private fun TextStylePanel(kind: BlockKind, headingLevel: Int, onSelect: (BlockKind, Int) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 8.dp)) {
         FilterChip(
             selected = kind == BlockKind.PARAGRAPH,
-            onClick = { onSelect(null) },
+            onClick = { onSelect(BlockKind.PARAGRAPH, headingLevel) },
             label = { Text(stringResource(R.string.format_paragraph)) },
         )
         for (level in BlockContent.Heading.MIN_LEVEL..BlockContent.Heading.MAX_LEVEL) {
             FilterChip(
                 selected = kind == BlockKind.HEADING && headingLevel == level,
-                onClick = { onSelect(level) },
+                onClick = { onSelect(BlockKind.HEADING, level) },
                 label = { Text(stringResource(R.string.format_heading, level)) },
+            )
+        }
+        for ((option, label) in LIST_STYLES) {
+            FilterChip(
+                selected = kind == option,
+                onClick = { onSelect(option, headingLevel) },
+                label = { Text(stringResource(label)) },
             )
         }
     }
 }
+
+private val LIST_STYLES = listOf(
+    BlockKind.BULLET to R.string.block_bulleted_list,
+    BlockKind.NUMBERED to R.string.block_numbered_list,
+    BlockKind.QUOTE to R.string.editor_quote_hint,
+)
 
 @Composable
 private fun ColorPanel(colors: List<PaletteColor>, selected: Int?, @StringRes resetLabel: Int, onSelect: (Int?) -> Unit) {

@@ -179,12 +179,20 @@ class EditorViewModel @Inject constructor(
         markDirty(block.id)
     }
 
-    /** Turns the focused text block into a paragraph, or into a heading of [headingLevel]. */
-    fun setFocusedTextStyle(headingLevel: Int?) {
+    /** Turns the focused text block into [kind]; [headingLevel] applies to headings. */
+    fun setFocusedKind(kind: BlockKind, headingLevel: Int = BlockContent.Heading.MIN_LEVEL) {
         val block = focusedTextBlock() ?: return
-        val kind = if (headingLevel == null) BlockKind.PARAGRAPH else BlockKind.HEADING
-        if (block.kind == kind && (headingLevel == null || block.headingLevel == headingLevel)) return
-        editing.convert(block, kind, headingLevel ?: block.headingLevel)
+        if (!kind.isText || block.kind == kind && (kind != BlockKind.HEADING || block.headingLevel == headingLevel)) return
+        editing.convert(block, kind, headingLevel)
+        markDirty(block.id)
+    }
+
+    /** Moves the focused list item one level in (+1) or out (-1). */
+    fun indentFocused(delta: Int) {
+        val block = focusedTextBlock()?.takeIf { it.kind == BlockKind.BULLET || it.kind == BlockKind.NUMBERED } ?: return
+        val indent = (block.indent + delta).coerceIn(0, BlockContent.ListItem.MAX_INDENT)
+        if (indent == block.indent) return
+        block.indent = indent
         markDirty(block.id)
     }
 

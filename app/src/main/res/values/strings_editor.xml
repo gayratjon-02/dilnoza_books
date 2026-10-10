@@ -27,4 +27,6 @@
         <item quantity="one">%d word</item>
         <item quantity="other">%d words</item>
     </plurals>
+    <string name="block_bulleted_list">Bulleted list</string>
+    <string name="block_numbered_list">Numbered list</string>
 </resources>

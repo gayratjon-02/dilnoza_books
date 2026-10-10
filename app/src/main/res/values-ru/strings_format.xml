@@ -32,4 +32,6 @@
     <string name="format_color_default">Цвет по умолчанию</string>
     <string name="format_highlight_none">Без выделения</string>
     <string name="format_close_panel">Закрыть</string>
+    <string name="format_indent">Увеличить отступ</string>
+    <string name="format_outdent">Уменьшить отступ</string>
 </resources>
