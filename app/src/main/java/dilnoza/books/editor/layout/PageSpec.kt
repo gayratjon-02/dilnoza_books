@@ -36,6 +36,8 @@ data class PageSpec(
 
 /** Typographic scale of page content, in points. */
 object PageTypography {
+    const val TITLE_SIZE_PT = 22f
+    const val TITLE_SPACE_AFTER_PT = 14f
     const val BODY_SIZE_PT = 11f
     const val LINE_HEIGHT = 1.45f
     const val PARAGRAPH_SPACING_PT = 6f

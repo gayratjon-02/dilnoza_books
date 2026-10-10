@@ -14,6 +14,8 @@ sealed interface FlowItem {
         override val spaceAfterPt: Float = 0f,
         /** Headings: never end a page, move to the next page together with the following block. */
         val keepWithNext: Boolean = false,
+        /** Character offset where each line starts, so a page gap can be inserted before a line. */
+        val lineStarts: List<Int> = emptyList(),
     ) : FlowItem
 
     /** Image, table or divider: moves to the next page as a whole; scaled down if taller than a page. */

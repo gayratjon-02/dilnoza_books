@@ -7,6 +7,8 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import dilnoza.books.core.ui.theme.BookSerif
+import dilnoza.books.domain.model.BlockContent
+import dilnoza.books.domain.model.RichText
 import dilnoza.books.domain.model.TextAlignment
 
 /**
@@ -36,6 +38,8 @@ object PageStyles {
         textAlign = align.toTextAlign(),
     )
 
+    fun title() = base(PageTypography.TITLE_SIZE_PT, TextAlignment.START).copy(fontWeight = FontWeight.Bold)
+
     fun body(align: TextAlignment = TextAlignment.START) = base(PageTypography.BODY_SIZE_PT, align)
 
     fun heading(level: Int, align: TextAlignment = TextAlignment.START) =
@@ -48,6 +52,25 @@ object PageStyles {
     fun tableCell(header: Boolean) = body().copy(fontWeight = if (header) FontWeight.Bold else null)
 
     fun pageNumber() = base(PageTypography.PAGE_NUMBER_SIZE_PT, TextAlignment.CENTER)
+
+    /** Style of a text block, or null for blocks without running text. */
+    fun forContent(content: BlockContent): TextStyle? {
+        val (style, text) = when (content) {
+            is BlockContent.Paragraph -> body(content.align) to content.text
+            is BlockContent.Heading -> heading(content.level, content.align) to content.text
+            is BlockContent.ListItem -> body(content.align) to content.text
+            is BlockContent.Quote -> quote(content.align) to content.text
+            else -> return null
+        }
+        return withRunSizes(style, text)
+    }
+
+    /** A fixed line height would clip enlarged runs, so the block's lines grow to fit its largest run. */
+    fun withRunSizes(style: TextStyle, rich: RichText): TextStyle {
+        val largest = rich.spans.maxOfOrNull { it.style.fontSizeSp ?: 0 } ?: 0
+        val needed = largest * PageTypography.LINE_HEIGHT
+        return if (needed > style.lineHeight.value) style.copy(lineHeight = needed.sp) else style
+    }
 
     private fun TextAlignment.toTextAlign() = when (this) {
         TextAlignment.START -> TextAlign.Start

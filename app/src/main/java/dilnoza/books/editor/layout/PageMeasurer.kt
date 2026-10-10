@@ -22,53 +22,47 @@ class PageMeasurer(
     private val spec: PageSpec,
     private val styled: (RichText) -> AnnotatedString,
 ) {
-    fun measure(blocks: List<Block>): List<FlowItem> = blocks.map(::measure)
+    fun measure(blocks: List<Block>): List<FlowItem> = blocks.map { measure(it.id, it.content) }
 
-    fun measure(block: Block): FlowItem = when (val content = block.content) {
-        is BlockContent.Paragraph -> text(block.id, content.text, PageStyles.body(content.align), spec.contentWidthPt)
+    fun measureTitle(title: String): FlowItem.Text =
+        text(TITLE_ID, RichText(title), PageStyles.title(), spec.contentWidthPt)
+            .copy(spaceAfterPt = PageTypography.TITLE_SPACE_AFTER_PT, keepWithNext = true)
+
+    fun measure(id: String, content: BlockContent): FlowItem = when (content) {
+        is BlockContent.Paragraph -> text(id, content.text, textStyle(content), spec.contentWidthPt)
             .copy(spaceAfterPt = PageTypography.PARAGRAPH_SPACING_PT)
 
-        is BlockContent.Heading -> text(
-            block.id,
-            content.text,
-            PageStyles.heading(content.level, content.align),
-            spec.contentWidthPt,
-        ).copy(
+        is BlockContent.Heading -> text(id, content.text, textStyle(content), spec.contentWidthPt).copy(
             spaceBeforePt = PageTypography.HEADING_SPACE_BEFORE_PT,
             spaceAfterPt = PageTypography.HEADING_SPACE_AFTER_PT,
             keepWithNext = true,
         )
 
-        is BlockContent.ListItem -> {
-            val inset = content.indent * PageStyles.LIST_INDENT_PT + PageStyles.LIST_LABEL_WIDTH_PT
-            text(block.id, content.text, PageStyles.body(content.align), spec.contentWidthPt - inset)
-                .copy(spaceAfterPt = PageStyles.LIST_ITEM_GAP_PT)
-        }
+        is BlockContent.ListItem -> text(id, content.text, textStyle(content), spec.contentWidthPt - listInset(content.indent))
+            .copy(spaceAfterPt = PageStyles.LIST_ITEM_GAP_PT)
 
-        is BlockContent.Quote -> text(
-            block.id,
-            content.text,
-            PageStyles.quote(content.align),
-            spec.contentWidthPt - PageStyles.QUOTE_INDENT_PT,
-        ).copy(spaceBeforePt = PageTypography.PARAGRAPH_SPACING_PT, spaceAfterPt = PageTypography.PARAGRAPH_SPACING_PT)
+        is BlockContent.Quote -> text(id, content.text, textStyle(content), spec.contentWidthPt - PageStyles.QUOTE_INDENT_PT)
+            .copy(spaceBeforePt = PageTypography.PARAGRAPH_SPACING_PT, spaceAfterPt = PageTypography.PARAGRAPH_SPACING_PT)
 
         is BlockContent.Image -> FlowItem.Box(
-            blockId = block.id,
+            blockId = id,
             heightPt = imageHeight(content),
             spaceBeforePt = PageStyles.BLOCK_GAP_PT,
             spaceAfterPt = PageStyles.BLOCK_GAP_PT,
         )
 
         is BlockContent.Table -> FlowItem.Box(
-            blockId = block.id,
+            blockId = id,
             heightPt = tableHeight(content),
             spaceBeforePt = PageStyles.BLOCK_GAP_PT,
             spaceAfterPt = PageStyles.BLOCK_GAP_PT,
         )
 
-        BlockContent.Divider -> FlowItem.Box(block.id, PageStyles.DIVIDER_HEIGHT_PT)
-        BlockContent.PageBreak -> FlowItem.Break(block.id)
+        BlockContent.Divider -> FlowItem.Box(id, PageStyles.DIVIDER_HEIGHT_PT)
+        BlockContent.PageBreak -> FlowItem.Break(id)
     }
+
+    private fun textStyle(content: BlockContent): TextStyle = checkNotNull(PageStyles.forContent(content))
 
     /** Picture height at its width share of the content box, plus the caption below it. */
     fun imageHeight(image: BlockContent.Image): Float {
@@ -86,14 +80,14 @@ class PageMeasurer(
         return table.rows.withIndex().sumOf { (index, row) ->
             val style = PageStyles.tableCell(header = table.headerRow && index == 0)
             val tallest = row.maxOfOrNull { layout(styled(it), style, cellWidth).size.height } ?: 0
-            (tallest + 2 * PageStyles.TABLE_CELL_PADDING_PT + PageStyles.TABLE_BORDER_PT).toDouble()
-        }.toFloat() + PageStyles.TABLE_BORDER_PT
+            (tallest + 2 * PageStyles.TABLE_CELL_PADDING_PT).toDouble()
+        }.toFloat()
     }
 
     private fun text(id: String, rich: RichText, style: TextStyle, widthPt: Float): FlowItem.Text {
         val result = layout(styled(rich), style, widthPt)
         val lines = (0 until result.lineCount).map { result.getLineBottom(it) - result.getLineTop(it) }
-        return FlowItem.Text(id, lines)
+        return FlowItem.Text(id, lines, lineStarts = (0 until result.lineCount).map(result::getLineStart))
     }
 
     private fun layout(text: AnnotatedString, style: TextStyle, widthPt: Float): TextLayoutResult =
@@ -104,6 +98,10 @@ class PageMeasurer(
         )
 
     companion object {
+        const val TITLE_ID = "chapter-title"
+
+        fun listInset(indent: Int): Float = indent * PageStyles.LIST_INDENT_PT + PageStyles.LIST_LABEL_WIDTH_PT
+
         /** 1dp == 1sp == 1px: measurements come out directly in points. */
         val PointDensity = Density(density = 1f, fontScale = 1f)
     }
