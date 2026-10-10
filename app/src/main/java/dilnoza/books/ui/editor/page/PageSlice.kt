@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -15,9 +16,11 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import dilnoza.books.editor.layout.PageMeasurer
 import dilnoza.books.editor.layout.PagePlan
 import dilnoza.books.editor.layout.PageStyles
 import kotlin.math.ceil
@@ -46,11 +49,12 @@ fun PageSlice(
     content: @Composable () -> Unit = {},
 ) {
     val spec = plan.spec
+    val numberStyle = remember(colors.number) { PageStyles.pageNumber().copy(color = colors.number) }
     Box(
         modifier = modifier
             .width(spec.widthPt.dp)
             .height((endPt - startPt).coerceAtLeast(0f).dp)
-            .drawBehind { drawPages(plan, startPt, endPt, firstPageNumber, colors, numberMeasurer) },
+            .drawBehind { drawPages(plan, startPt, endPt, firstPageNumber, colors, numberMeasurer, numberStyle) },
     ) {
         Box(
             modifier = Modifier
@@ -97,6 +101,7 @@ private fun DrawScope.drawPages(
     firstPageNumber: Int,
     colors: PageColors,
     numberMeasurer: TextMeasurer,
+    numberStyle: TextStyle,
 ) {
     val spec = plan.spec
     val edge = 0.75f
@@ -122,10 +127,12 @@ private fun DrawScope.drawPages(
 
         val numberCenter = bottom - spec.marginPt / 2
         if (numberCenter in startPt..endPt) {
+            // In points like the page, whatever density the measurer was made with: 9 pt, never 9 sp.
             val layout = numberMeasurer.measure(
                 text = (firstPageNumber + page).toString(),
-                style = PageStyles.pageNumber().copy(color = colors.number),
+                style = numberStyle,
                 constraints = Constraints(maxWidth = size.width.toInt()),
+                density = PageMeasurer.PointDensity,
             )
             drawText(
                 layout,

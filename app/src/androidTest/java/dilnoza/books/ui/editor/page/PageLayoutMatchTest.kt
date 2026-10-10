@@ -17,7 +17,12 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -176,6 +181,42 @@ class PageLayoutMatchTest {
             assertEquals("images drawn at another height than planned", emptyList<String>(), mismatches)
         }
     }
+
+    @Test
+    fun pageNumberIsNinePointsTallWhateverTheScreenDensity() {
+        val spec = SPECS.first()
+        val plan = PagePlan.build(spec, 18f, emptyList(), Pagination(1, emptyList()))
+        rule.runOnIdle {
+            screen = {
+                // Made outside the point space with the screen's density, as the editor makes it.
+                val screenMeasurer = rememberTextMeasurer()
+                PointSpace(scale = 1f) {
+                    PageSlice(
+                        plan = plan,
+                        startPt = 0f,
+                        endPt = spec.heightPt,
+                        contentTopPt = 0f,
+                        contentHeightPt = null,
+                        firstPageNumber = 8,
+                        colors = PageColors(Color.White, Color.White, Color.Black),
+                        numberMeasurer = screenMeasurer,
+                        modifier = Modifier.testTag("page"),
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+        val image = rule.onNodeWithTag("page").captureToImage().asAndroidBitmap()
+        // Ink of the "8" in the bottom margin, in points (1px == 1pt at scale 1).
+        val rows = (0 until image.height).filter { y -> (0 until image.width).any { x -> isInk(image.getPixel(x, y)) } }
+        val inkHeight = rows.last() - rows.first() + 1
+        assertTrue("page number ink is $inkHeight pt tall, a 9 pt digit is about 6.5 pt", inkHeight in 5..10)
+        assertTrue("page number must sit in the bottom margin", rows.first() > spec.heightPt - spec.marginPt)
+    }
+
+    /** Any visibly dark pixel: strokes of a 9 px digit are thin and mostly anti-aliased grey. */
+    private fun isInk(pixel: Int): Boolean =
+        android.graphics.Color.red(pixel) < 200 && android.graphics.Color.green(pixel) < 200 && android.graphics.Color.blue(pixel) < 200
 
     @Test
     fun tableTallerThanAPageIsDrawnShrunkInsideItsSlot() {
