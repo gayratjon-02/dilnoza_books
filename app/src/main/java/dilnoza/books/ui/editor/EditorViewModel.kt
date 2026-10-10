@@ -184,14 +184,7 @@ class EditorViewModel @Inject constructor(
         val block = focusedTextBlock() ?: return
         val kind = if (headingLevel == null) BlockKind.PARAGRAPH else BlockKind.HEADING
         if (block.kind == kind && (headingLevel == null || block.headingLevel == headingLevel)) return
-        block.kind = kind
-        if (headingLevel != null) {
-            block.headingLevel = headingLevel
-            if (block.value.text.contains('\n')) {
-                // Same length, so the spans still line up.
-                block.setRich(block.rich.copy(text = block.rich.text.replace('\n', ' ')), block.value.selection)
-            }
-        }
+        editing.convert(block, kind, headingLevel ?: block.headingLevel)
         markDirty(block.id)
     }
 

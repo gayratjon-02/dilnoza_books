@@ -202,4 +202,55 @@ class BlockEditingTest {
         assertEquals(listOf(BlockKind.PARAGRAPH to "abcd"), texts)
         assertEquals(TextRange(2), a.value.selection)
     }
+
+    @Test
+    fun `markdown markers turn a paragraph into headings, lists and quotes`() {
+        val cases = listOf(
+            "#" to (BlockKind.HEADING to 1),
+            "##" to (BlockKind.HEADING to 2),
+            "###" to (BlockKind.HEADING to 3),
+            "-" to (BlockKind.BULLET to 1),
+            "*" to (BlockKind.BULLET to 1),
+            "1." to (BlockKind.NUMBERED to 1),
+            ">" to (BlockKind.QUOTE to 1),
+        )
+        for ((marker, expected) in cases) {
+            blocks.clear()
+            val a = block("a", BlockKind.PARAGRAPH, marker + "Bob")
+
+            assertEquals(BlockEdit.Content("a"), a.type("$marker Bob", marker.length + 1))
+            assertEquals(marker, expected.first, a.kind)
+            assertEquals(marker, expected.second, a.headingLevel)
+            assertEquals(marker, "Bob", a.rich.text)
+            assertEquals(marker, TextRange(0), a.value.selection)
+        }
+    }
+
+    @Test
+    fun `markers only work in paragraphs`() {
+        val a = block("a", BlockKind.QUOTE, "#")
+
+        a.type("# ", 2)
+
+        assertEquals(listOf(BlockKind.QUOTE to "# "), texts)
+    }
+
+    @Test
+    fun `three dashes become a divider followed by a paragraph`() {
+        val a = block("a", BlockKind.PARAGRAPH, "--")
+
+        val edit = a.type("---", 3)
+
+        assertEquals(listOf(BlockKind.DIVIDER to "", BlockKind.PARAGRAPH to ""), texts)
+        assertEquals(BlockEdit.Structure(focusId = blocks[1].id), edit)
+    }
+
+    @Test
+    fun `a divider reuses an empty paragraph after it`() {
+        val a = block("a", BlockKind.PARAGRAPH, "--")
+        block("b", BlockKind.PARAGRAPH)
+
+        assertEquals(BlockEdit.Structure(focusId = "b"), a.type("---", 3))
+        assertEquals(2, blocks.size)
+    }
 }

@@ -4,6 +4,9 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import dilnoza.books.domain.model.RichText
 import dilnoza.books.domain.model.SpanStyleData
+import dilnoza.books.editor.commands.MarkdownShortcuts
+import dilnoza.books.editor.commands.ShortcutMatch
+import dilnoza.books.editor.commands.ShortcutTarget
 import dilnoza.books.editor.richtext.RichTextEditor
 import dilnoza.books.editor.richtext.plus
 import dilnoza.books.editor.richtext.subText
@@ -34,12 +37,57 @@ class BlockEditing(
     fun type(block: EditorBlock, value: TextFieldValue, typingStyle: SpanStyleData?): BlockEdit {
         val cursor = value.selection.end
         val breaks = insertedLineBreaks(block.value.text, value.text, cursor)
-        if (breaks.isEmpty()) {
+        val shortcut = if (breaks.isEmpty() && block.kind == BlockKind.PARAGRAPH) {
+            MarkdownShortcuts.detect(block.value.text, value.text, cursor)
+        } else {
+            null
+        }
+        if (breaks.isEmpty() && shortcut == null) {
             block.setValue(value, typingStyle)
             return BlockEdit.Content(block.id)
         }
         val edited = RichTextEditor.applyTextChange(block.rich, value.text, typingStyle, cursor)
-        return splitLines(block, edited, breaks, cursor)
+        return if (shortcut != null) {
+            applyShortcut(block, edited, shortcut, cursor)
+        } else {
+            splitLines(block, edited, breaks, cursor)
+        }
+    }
+
+    /** Turns a text block into another text kind; headings cannot hold line breaks. */
+    fun convert(block: EditorBlock, kind: BlockKind, headingLevel: Int = block.headingLevel) {
+        block.kind = kind
+        if (kind == BlockKind.HEADING) {
+            block.headingLevel = headingLevel
+            // Same length, so spans and selection still line up.
+            if ('\n' in block.rich.text) block.setRich(block.rich.withoutLineBreaksIf(true), block.value.selection)
+        }
+    }
+
+    private fun applyShortcut(block: EditorBlock, edited: RichText, match: ShortcutMatch, cursor: Int): BlockEdit {
+        val rest = edited.subText(match.markerLength, edited.text.length)
+        block.setRich(rest, TextRange((cursor - match.markerLength).coerceIn(0, rest.text.length)))
+        when (match.target) {
+            ShortcutTarget.HEADING_1 -> convert(block, BlockKind.HEADING, 1)
+            ShortcutTarget.HEADING_2 -> convert(block, BlockKind.HEADING, 2)
+            ShortcutTarget.HEADING_3 -> convert(block, BlockKind.HEADING, 3)
+            ShortcutTarget.BULLET_LIST -> convert(block, BlockKind.BULLET)
+            ShortcutTarget.NUMBERED_LIST -> convert(block, BlockKind.NUMBERED)
+            ShortcutTarget.QUOTE -> convert(block, BlockKind.QUOTE)
+            ShortcutTarget.DIVIDER -> {
+                block.kind = BlockKind.DIVIDER
+                return BlockEdit.Structure(focusId = textBlockAfter(block).id)
+            }
+        }
+        return BlockEdit.Content(block.id)
+    }
+
+    /** The empty text block right after [block], adding a paragraph there if there is none. */
+    private fun textBlockAfter(block: EditorBlock): EditorBlock {
+        val index = blocks.indexOf(block)
+        val next = blocks.getOrNull(index + 1)
+        if (next != null && next.kind.isText && next.value.text.isEmpty()) return next
+        return newBlock(BlockKind.PARAGRAPH, RichText.Empty).also { blocks.add(index + 1, it) }
     }
 
     private fun splitLines(block: EditorBlock, edited: RichText, breaks: List<Int>, cursor: Int): BlockEdit {
