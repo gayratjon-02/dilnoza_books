@@ -31,4 +31,12 @@
     <string name="block_numbered_list">Numbered list</string>
     <string name="slash_menu">Insert block</string>
     <string name="table_cell">Row %1$d, column %2$d</string>
+    <string name="table_header_row">Header row</string>
+    <string name="table_row_above">Row above</string>
+    <string name="table_row_below">Row below</string>
+    <string name="table_delete_row">Delete row</string>
+    <string name="table_column_before">Column before</string>
+    <string name="table_column_after">Column after</string>
+    <string name="table_delete_column">Delete column</string>
+    <string name="table_delete">Delete table</string>
 </resources>

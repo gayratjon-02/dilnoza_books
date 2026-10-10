@@ -207,7 +207,7 @@ private fun TableCell(
                 modifier = Modifier
                     .defaultMinSize(minHeight = 48.dp)
                     .padding(horizontal = 10.dp, vertical = 12.dp),
-                contentAlignment = Alignment.CenterStart,
+                contentAlignment = Alignment.TopStart,
             ) {
                 inner()
             }

@@ -368,7 +368,16 @@ fun EditorScreen(
                     )
                 } else {
                     val formatState = viewModel.formatState
-                    if (focused != null && formatState != null) {
+                    val table = focused?.table
+                    val cell = viewModel.focusedCell
+                    if (focused != null && focused.kind == BlockKind.TABLE && table != null && cell != null && table.contains(cell)) {
+                        TableBar(
+                            table = table,
+                            onAction = viewModel::onTableAction,
+                            onDeleteTable = viewModel::deleteFocusedBlock,
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    } else if (focused != null && formatState != null) {
                         FormatBar(
                             state = formatState,
                             kind = focused.kind,

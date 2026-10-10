@@ -30,4 +30,12 @@
     <string name="block_numbered_list">Raqamli roʻyxat</string>
     <string name="slash_menu">Blok qoʻshish</string>
     <string name="table_cell">%1$d-qator, %2$d-ustun</string>
+    <string name="table_header_row">Sarlavha qatori</string>
+    <string name="table_row_above">Yuqoriga qator</string>
+    <string name="table_row_below">Pastga qator</string>
+    <string name="table_delete_row">Qatorni oʻchirish</string>
+    <string name="table_column_before">Oldiga ustun</string>
+    <string name="table_column_after">Keyiniga ustun</string>
+    <string name="table_delete_column">Ustunni oʻchirish</string>
+    <string name="table_delete">Jadvalni oʻchirish</string>
 </resources>

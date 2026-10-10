@@ -253,6 +253,19 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /** Changes the focused table around the focused cell; the caret follows to the cell [action] picks. */
+    fun onTableAction(action: TableAction) {
+        val block = focusedBlock?.takeIf { it.kind == BlockKind.TABLE } ?: return
+        val table = block.table ?: return
+        val cell = focusedCell?.takeIf(table::contains) ?: return
+        val (updated, caret) = table.apply(action, cell)
+        if (updated == table) return
+        block.table = updated
+        markDirty(block.id)
+        focusedCell = caret
+        focusRequest = FocusRequest(block.id, caret)
+    }
+
     private fun leaveTable(block: EditorBlock) {
         val index = blocks.indexOf(block)
         val next = blocks.getOrNull(index + 1)
