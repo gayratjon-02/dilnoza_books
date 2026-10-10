@@ -53,4 +53,5 @@
     <string name="editor_redo">Повторить</string>
     <string name="editor_move_block_up">Переместить блок вверх</string>
     <string name="editor_move_block_down">Переместить блок вниз</string>
+    <string name="editor_add_page">Новая страница</string>
 </resources>

@@ -50,6 +50,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import dilnoza.books.R
+import dilnoza.books.ui.editor.page.ScreenDensity
 
 /** A block type offered by the "/" menu. [keywords] are English and match in every language. */
 enum class SlashCommand(
@@ -119,6 +120,7 @@ fun SlashMenuPopup(
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = false),
     ) {
+        ScreenDensity {
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceContainer,
@@ -134,6 +136,7 @@ fun SlashMenuPopup(
                     SlashMenuItem(command, labels.getValue(command), index == highlighted) { onSelect(command) }
                 }
             }
+        }
         }
     }
 }

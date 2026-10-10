@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.content.MediaType
@@ -19,6 +20,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -48,6 +50,7 @@ import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.automirrored.outlined.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.outlined.FormatAlignRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
@@ -62,6 +65,7 @@ import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -76,6 +80,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -96,6 +101,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -122,6 +128,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -138,8 +145,18 @@ import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.editor.autosave.SaveStatus
 import dilnoza.books.editor.commands.SlashCommands
 import dilnoza.books.editor.commands.SlashQuery
+import dilnoza.books.editor.layout.PageMeasurer
+import dilnoza.books.editor.layout.PageStyles
 import dilnoza.books.editor.richtext.StyleAttribute
 import dilnoza.books.editor.search.SearchMatch
+import dilnoza.books.ui.editor.page.LocalPageScale
+import dilnoza.books.ui.editor.page.LocalScreenDensity
+import dilnoza.books.ui.editor.page.NormalSize
+import dilnoza.books.ui.editor.page.PageColors
+import dilnoza.books.ui.editor.page.PageSlice
+import dilnoza.books.ui.editor.page.PointSpace
+import dilnoza.books.ui.editor.page.layoutContent
+import dilnoza.books.ui.editor.page.rememberEditorPages
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -152,7 +169,9 @@ fun EditorScreen(
     val resolver = LocalContext.current.contentResolver
     val activity = LocalActivity.current
     val focusManager = LocalFocusManager.current
-    val density = LocalDensity.current
+    // The block list is laid out in page points (see PointSpace); scroll maths uses the same units.
+    val density = PageMeasurer.PointDensity
+    var pageScale by remember { mutableFloatStateOf(1f) }
     val snackbarHostState = remember { SnackbarHostState() }
     var listTopInRoot by remember { mutableFloatStateOf(0f) }
     var listBottomInRoot by remember { mutableFloatStateOf(0f) }
@@ -174,7 +193,7 @@ fun EditorScreen(
                 permissions?.release()
                 dropHovering = false
                 if (sources.isEmpty()) return false
-                val index = dropIndex(listState, viewModel, dragEvent.y - listTopInRoot)
+                val index = dropIndex(listState, viewModel, (dragEvent.y - listTopInRoot) / pageScale)
                 viewModel.insertImages(sources, index)
                 return true
             }
@@ -318,11 +337,36 @@ fun EditorScreen(
                     )
                     HorizontalDivider()
                 }
-                LazyColumn(
-                    state = listState,
+                val pages = rememberEditorPages({ viewModel.title.text }, viewModel.blocks, viewModel.pageSpec)
+                val plan = pages.plan
+                val numberMeasurer = rememberTextMeasurer()
+                val pageColors = PageColors(
+                    paper = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    edge = MaterialTheme.colorScheme.outlineVariant,
+                    number = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                @Composable
+                fun PlannedSlice(id: String, content: @Composable () -> Unit) {
+                    val placed = plan.blocks[id] ?: return
+                    PageSlice(
+                        plan = plan,
+                        startPt = placed.startPt,
+                        endPt = placed.endPt,
+                        contentTopPt = placed.leadPt,
+                        contentHeightPt = placed.heightPt,
+                        firstPageNumber = viewModel.firstPageNumber,
+                        colors = pageColors,
+                        numberMeasurer = numberMeasurer,
+                        content = content,
+                    )
+                }
+
+                BoxWithConstraints(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                         .onGloballyPositioned {
                             listTopInRoot = it.positionInRoot().y
                             listBottomInRoot = listTopInRoot + it.size.height
@@ -340,82 +384,115 @@ fun EditorScreen(
                                 Modifier
                             },
                         ),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                 ) {
-                    item(key = "title") {
-                        TitleField(value = viewModel.title, onValueChange = viewModel::onTitleChange)
-                    }
-                    items(viewModel.blocks, key = { it.id }) { block ->
-                        val selectBlock = {
-                            focusManager.clearFocus()
-                            viewModel.selectBlock(block.id)
-                        }
-                        val selected = viewModel.focusedBlock?.id == block.id
-                        when (block.kind) {
-                            BlockKind.IMAGE -> ImageBlockView(
-                                block = block,
-                                file = block.image?.fileName?.let(viewModel::imageFile),
-                                selected = selected,
-                                onSelect = selectBlock,
-                                onResize = { viewModel.setImageWidth(block, it) },
-                                onCaptionChange = { viewModel.onBlockChange(block, it) },
-                                onCaptionFocused = { viewModel.onBlockFocused(block.id) },
-                            )
-                            BlockKind.DIVIDER -> DividerBlockView(selected, selectBlock)
-                            BlockKind.PAGE_BREAK -> PageBreakBlockView(selected, selectBlock)
-                            BlockKind.TABLE -> block.table?.let { table ->
-                                TableBlockView(
-                                    block = block,
-                                    table = table,
-                                    selected = selected && viewModel.focusedCell == null,
-                                    focusedCell = viewModel.focusedCell.takeIf { selected },
-                                    onCellFocused = { viewModel.onCellFocused(block, it) },
-                                    onCellChange = { cell, text -> viewModel.onCellChange(block, cell, text) },
-                                    onCellNext = { cell, forward, enter -> viewModel.onCellNext(block, cell, forward, enter) },
+                    // The page fills the screen width; everything inside is laid out in page points.
+                    val scale = constraints.maxWidth / (viewModel.pageSpec.widthPt + 2 * DESK_PADDING_PT)
+                    SideEffect { pageScale = scale }
+                    PointSpace(scale = scale, modifier = Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(DESK_PADDING_PT.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            item(key = "title") {
+                                PlannedSlice(PageMeasurer.TITLE_ID) {
+                                    TitleField(value = viewModel.title, onValueChange = viewModel::onTitleChange)
+                                }
+                            }
+                            items(viewModel.blocks, key = { it.id }) { block ->
+                                val selectBlock = {
+                                    focusManager.clearFocus()
+                                    viewModel.selectBlock(block.id)
+                                }
+                                val selected = viewModel.focusedBlock?.id == block.id
+                                PlannedSlice(block.id) {
+                                when (block.kind) {
+                                    BlockKind.IMAGE -> ImageBlockView(
+                                        block = block,
+                                        file = block.image?.fileName?.let(viewModel::imageFile),
+                                        selected = selected,
+                                        onSelect = selectBlock,
+                                        onResize = { viewModel.setImageWidth(block, it) },
+                                        onCaptionChange = { viewModel.onBlockChange(block, it) },
+                                        onCaptionFocused = { viewModel.onBlockFocused(block.id) },
+                                    )
+                                    BlockKind.DIVIDER -> DividerBlockView(selected, selectBlock)
+                                    BlockKind.PAGE_BREAK -> PageBreakBlockView(selected, selectBlock)
+                                    BlockKind.TABLE -> block.table?.let { table ->
+                                        TableBlockView(
+                                            block = block,
+                                            table = table,
+                                            selected = selected && viewModel.focusedCell == null,
+                                            focusedCell = viewModel.focusedCell.takeIf { selected },
+                                            onCellFocused = { viewModel.onCellFocused(block, it) },
+                                            onCellChange = { cell, text -> viewModel.onCellChange(block, cell, text) },
+                                            onCellNext = { cell, forward, enter -> viewModel.onCellNext(block, cell, forward, enter) },
+                                        )
+                                    }
+                                    else -> BlockField(
+                                        block = block,
+                                        listLabel = viewModel.listLabels[block.id],
+                                        searchMarks = viewModel.matchesByBlock[block.id].orEmpty(),
+                                        currentMark = viewModel.currentMatch?.takeIf { it.unitId == block.id }?.let { it.start until it.end },
+                                        onValueChange = { viewModel.onBlockChange(block, it) },
+                                        onBackspaceAtStart = { viewModel.onBackspaceAtStart(block) },
+                                        onDeleteAtEnd = { viewModel.onDeleteAtEnd(block) },
+                                        onFocused = { viewModel.onBlockFocused(block.id) },
+                                        onFormat = viewModel::format,
+                                        onIndent = viewModel::indentFocused,
+                                        slashQuery = viewModel.slashQuery?.takeIf { selected },
+                                        visibleTop = listTopInRoot,
+                                        visibleBottom = listBottomInRoot,
+                                        onSlashCommand = { command ->
+                                            when (viewModel.runSlashCommand(command)) {
+                                                SlashOutcome.PICK_IMAGES -> pickImages.launch(
+                                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                                )
+                                                SlashOutcome.PICK_TABLE_SIZE -> pickTableSize = true
+                                                SlashOutcome.DONE -> Unit
+                                            }
+                                        },
+                                        onSlashDismiss = viewModel::dismissSlashMenu,
+                                        onImagesPasted = { uris ->
+                                            viewModel.insertImages(resolver.openImageSources(uris))
+                                        },
+                                        pageGaps = pages.gapsOf(block.id),
+                                    )
+                                }
+                                }
+                            }
+                            item(key = "tail") {
+                                val end = plan.blocks.values.lastOrNull()?.endPt ?: 0f
+                                // Tapping the empty rest of the last page continues writing at the end.
+                                PageSlice(
+                                    plan = plan,
+                                    startPt = end,
+                                    endPt = end + plan.tailPt,
+                                    contentTopPt = 0f,
+                                    contentHeightPt = null,
+                                    firstPageNumber = viewModel.firstPageNumber,
+                                    colors = pageColors,
+                                    numberMeasurer = numberMeasurer,
+                                    modifier = Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = viewModel::focusLastBlock,
+                                    ),
                                 )
                             }
-                            else -> BlockField(
-                                block = block,
-                                listLabel = viewModel.listLabels[block.id],
-                                searchMarks = viewModel.matchesByBlock[block.id].orEmpty(),
-                                currentMark = viewModel.currentMatch?.takeIf { it.unitId == block.id }?.let { it.start until it.end },
-                                onValueChange = { viewModel.onBlockChange(block, it) },
-                                onBackspaceAtStart = { viewModel.onBackspaceAtStart(block) },
-                                onDeleteAtEnd = { viewModel.onDeleteAtEnd(block) },
-                                onFocused = { viewModel.onBlockFocused(block.id) },
-                                onFormat = viewModel::format,
-                                onIndent = viewModel::indentFocused,
-                                slashQuery = viewModel.slashQuery?.takeIf { selected },
-                                visibleTop = listTopInRoot,
-                                visibleBottom = listBottomInRoot,
-                                onSlashCommand = { command ->
-                                    when (viewModel.runSlashCommand(command)) {
-                                        SlashOutcome.PICK_IMAGES -> pickImages.launch(
-                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                        )
-                                        SlashOutcome.PICK_TABLE_SIZE -> pickTableSize = true
-                                        SlashOutcome.DONE -> Unit
+                            item(key = "add-page") {
+                                NormalSize {
+                                    Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                                        FilledTonalButton(onClick = viewModel::addPage) {
+                                            Icon(Icons.Filled.Add, contentDescription = null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(stringResource(R.string.editor_add_page))
+                                        }
                                     }
-                                },
-                                onSlashDismiss = viewModel::dismissSlashMenu,
-                                onImagesPasted = { uris ->
-                                    viewModel.insertImages(resolver.openImageSources(uris))
-                                },
-                            )
+                                }
+                            }
                         }
-                    }
-                    item(key = "tail") {
-                        // Tapping the empty space below the text continues writing at the end.
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(240.dp)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = viewModel::focusLastBlock,
-                                ),
-                        )
                     }
                 }
                 HorizontalDivider()
@@ -496,16 +573,14 @@ fun EditorScreen(
 
 @Composable
 private fun TitleField(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit) {
-    val style = MaterialTheme.typography.headlineMedium.copy(color = MaterialTheme.colorScheme.onSurface)
+    val style = PageStyles.title().copy(color = MaterialTheme.colorScheme.onSurface)
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         textStyle = style,
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 16.dp),
+        modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
             Box {
                 if (value.text.isEmpty()) Placeholder(stringResource(R.string.editor_title_hint), style)
@@ -534,20 +609,14 @@ private fun BlockField(
     onSlashCommand: (SlashCommand) -> Unit,
     onSlashDismiss: () -> Unit,
     onImagesPasted: (List<Uri>) -> Unit,
+    pageGaps: List<PageGap>,
 ) {
     val kind = block.kind
     val heading = kind == BlockKind.HEADING
     val rich = block.rich
-    val baseStyle = blockStyle(kind, block.headingLevel)
-    val largestSpanSp = rich.spans.maxOfOrNull { it.style.fontSizeSp ?: 0 } ?: 0
-    val style = baseStyle.copy(
-        textAlign = block.align.toTextAlign(),
-        // The block's fixed line height would clip enlarged text, so grow it to fit the largest run.
-        lineHeight = if (baseStyle.lineHeight.isSp && largestSpanSp * LINE_HEIGHT_FACTOR > baseStyle.lineHeight.value) {
-            (largestSpanSp * LINE_HEIGHT_FACTOR).sp
-        } else {
-            baseStyle.lineHeight
-        },
+    // Same style the paginator measured with, so lines and pages match what is drawn.
+    val style = (PageStyles.forContent(block.layoutContent()) ?: PageStyles.body()).copy(
+        color = if (kind == BlockKind.QUOTE) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
     )
     val darkTheme = isDarkPage()
     val colors = MaterialTheme.colorScheme
@@ -561,7 +630,9 @@ private fun BlockField(
             AnnotatedString.Range(style, range.first, range.last + 1)
         }
     }
-    val transformation = remember(rich, darkTheme, marks) { RichTextTransformation(rich, darkTheme, hiddenPrefix = 1, marks = marks) }
+    val transformation = remember(rich, darkTheme, marks, pageGaps) {
+        RichTextTransformation(rich, darkTheme, hiddenPrefix = 1, marks = marks, gaps = pageGaps)
+    }
     val fieldValue = remember(block.value) { block.value.toFieldValue() }
     val labels = SlashCommand.entries.associateWith { it.label() }
     val commands = remember(slashQuery?.filter, labels) {
@@ -582,16 +653,15 @@ private fun BlockField(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = if (heading) 16.dp else 4.dp, bottom = if (heading) 8.dp else 4.dp)
             .then(
                 if (kind == BlockKind.QUOTE) {
                     Modifier
                         .drawBehind {
-                            val width = 3.dp.toPx()
+                            val width = PageStyles.QUOTE_BAR_WIDTH_PT.dp.toPx()
                             val x = if (layoutDirection == LayoutDirection.Ltr) 0f else size.width - width
                             drawRect(quoteColor, topLeft = Offset(x, 0f), size = Size(width, size.height))
                         }
-                        .padding(start = 16.dp)
+                        .padding(start = PageStyles.QUOTE_INDENT_PT.dp)
                 } else {
                     Modifier
                 },
@@ -602,8 +672,9 @@ private fun BlockField(
                 text = listLabel,
                 style = style.copy(textAlign = TextAlign.End),
                 modifier = Modifier
-                    .padding(start = LIST_INDENT * block.indent, end = 8.dp)
-                    .width(LIST_MARKER_WIDTH),
+                    .padding(start = (PageStyles.LIST_INDENT_PT * block.indent).dp)
+                    .width(PageStyles.LIST_LABEL_WIDTH_PT.dp)
+                    .padding(end = LIST_LABEL_GAP_PT.dp),
             )
         }
         BasicTextField(
@@ -682,10 +753,14 @@ private fun BlockField(
                     inner()
                     val textLayout = layout
                     if (menuOpen && slashQuery != null && textLayout != null) {
-                        val density = LocalDensity.current
+                        // The field is drawn scaled inside the page; the popup lives in screen pixels.
+                        val density = LocalScreenDensity.current ?: LocalDensity.current
+                        val scale = LocalPageScale.current
                         val offset = slashQuery.slashIndex.coerceIn(0, textLayout.layoutInput.text.length)
                         val gap = with(density) { MENU_GAP.toPx() }
-                        val caret = textLayout.getCursorRect(offset).let { it.copy(top = it.top - gap, bottom = it.bottom + gap) }
+                        val caret = textLayout.getCursorRect(offset).let {
+                            Rect(it.left * scale, it.top * scale - gap, it.right * scale, it.bottom * scale + gap)
+                        }
                         val spaceBelow = visibleBottom - (fieldTop + caret.bottom)
                         val spaceAbove = fieldTop + caret.top - visibleTop
                         val wanted = with(density) { minOf(MENU_MAX_HEIGHT, MENU_ITEM_HEIGHT * commands.size + 12.dp).toPx() }
@@ -729,35 +804,6 @@ private fun KeyEvent.formatShortcut(): FormatChange? {
 private fun Placeholder(text: String, style: TextStyle) {
     Text(text = text, style = style.copy(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)))
 }
-
-@Composable
-private fun blockStyle(kind: BlockKind, headingLevel: Int): TextStyle = when (kind) {
-    BlockKind.HEADING -> when (headingLevel) {
-        1 -> MaterialTheme.typography.headlineSmall
-        2 -> MaterialTheme.typography.titleLarge
-        else -> MaterialTheme.typography.titleMedium
-    }.copy(color = MaterialTheme.colorScheme.onSurface)
-    BlockKind.QUOTE -> paragraphStyle().copy(
-        fontStyle = FontStyle.Italic,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    else -> paragraphStyle()
-}
-
-private fun TextAlignment.toTextAlign(): TextAlign = when (this) {
-    TextAlignment.START -> TextAlign.Start
-    TextAlignment.CENTER -> TextAlign.Center
-    TextAlignment.END -> TextAlign.End
-    TextAlignment.JUSTIFY -> TextAlign.Justify
-}
-
-@Composable
-private fun paragraphStyle(): TextStyle = MaterialTheme.typography.bodyLarge.copy(
-    fontFamily = FontFamily.Serif,
-    fontSize = 18.sp,
-    lineHeight = 28.sp,
-    color = MaterialTheme.colorScheme.onSurface,
-)
 
 @Composable
 private fun EditorToolbar(
@@ -963,7 +1009,6 @@ private val MIN_VISIBLE_BLOCK = 48.dp
 private val MENU_GAP = 4.dp
 private val MENU_ITEM_HEIGHT = 48.dp
 private val MENU_KEYS = setOf(Key.DirectionDown, Key.DirectionUp, Key.Enter, Key.NumPadEnter, Key.Escape)
-private val LIST_INDENT = 24.dp
-private const val LINE_HEIGHT_FACTOR = 1.4f
-private val LIST_MARKER_WIDTH = 28.dp
+private const val LIST_LABEL_GAP_PT = 5f
+private const val DESK_PADDING_PT = 10f
 private val WIDTH_PRESETS = listOf(25, 50, 75, 100)
