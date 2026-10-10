@@ -18,7 +18,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dilnoza.books.core.di.ApplicationScope
 import dilnoza.books.data.files.ImageStore
 import dilnoza.books.domain.model.BlockContent
-import dilnoza.books.domain.model.POSITION_STEP
 import dilnoza.books.domain.model.RichText
 import dilnoza.books.domain.model.SpanStyleData
 import dilnoza.books.domain.model.TextAlignment
@@ -767,13 +766,7 @@ class EditorViewModel @Inject constructor(
         }
         // Snapshot state is mutated on the main thread; read it there for a consistent view.
         val (upserts, titleText) = withContext(Dispatchers.Main.immediate) {
-            blocks.mapIndexedNotNull { index, block ->
-                if (block.id in ids && !block.isPendingImage) {
-                    block.toBlock(chapterId, (index + 1) * POSITION_STEP)
-                } else {
-                    null
-                }
-            } to title.text
+            savedBlocks(blocks, ids, chapterId) to title.text
         }
         try {
             blockRepository.saveChapter(
