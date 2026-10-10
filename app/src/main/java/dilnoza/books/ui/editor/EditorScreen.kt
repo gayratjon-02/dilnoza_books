@@ -42,6 +42,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.automirrored.outlined.Redo
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.automirrored.outlined.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.outlined.FormatAlignRight
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
@@ -247,7 +249,15 @@ fun EditorScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
-                actions = { SaveIndicator(saveStatus, Modifier.padding(end = 16.dp)) },
+                actions = {
+                    SaveIndicator(saveStatus, Modifier.padding(end = 4.dp))
+                    IconButton(onClick = viewModel::undo, enabled = viewModel.canUndo) {
+                        Icon(Icons.AutoMirrored.Outlined.Undo, contentDescription = stringResource(R.string.editor_undo))
+                    }
+                    IconButton(onClick = viewModel::redo, enabled = viewModel.canRedo) {
+                        Icon(Icons.AutoMirrored.Outlined.Redo, contentDescription = stringResource(R.string.editor_redo))
+                    }
+                },
             )
         },
     ) { padding ->

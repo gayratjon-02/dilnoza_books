@@ -47,4 +47,6 @@
     <string name="table_fewer_columns">Kamroq ustun</string>
     <string name="table_more_columns">Koʻproq ustun</string>
     <string name="table_size">Jadval oʻlchami: %1$d × %2$d</string>
+    <string name="editor_undo">Bekor qilish</string>
+    <string name="editor_redo">Qaytarish</string>
 </resources>

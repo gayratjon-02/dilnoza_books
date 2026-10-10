@@ -3,6 +3,7 @@ package dilnoza.books.ui.editor
 import android.os.ParcelFileDescriptor
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -29,6 +30,7 @@ import dilnoza.books.editor.commands.ListKind
 import dilnoza.books.editor.commands.ListNumbering
 import dilnoza.books.editor.commands.SlashCommands
 import dilnoza.books.editor.commands.SlashQuery
+import dilnoza.books.editor.history.UndoManager
 import dilnoza.books.editor.richtext.plus
 import dilnoza.books.editor.richtext.subText
 import dilnoza.books.ui.navigation.EditorRoute
@@ -86,6 +88,16 @@ class EditorViewModel @Inject constructor(
     // Style chosen with a collapsed caret, given to the next typed characters until the caret moves.
     private var typingStyle by mutableStateOf<SpanStyleData?>(null)
 
+    private val history = UndoManager<HistoryEntry>(coalesceWindowMillis = TYPING_COALESCE_MILLIS)
+    private var historyVersion by mutableLongStateOf(0L)
+    // Typing after a space starts a new undo step, so undo takes back one word at a time.
+    private var lastTypedWhitespace = false
+    // Pictures still being imported, and those already stored, so undo can bring a placeholder back right.
+    private val importingImages = mutableSetOf<String>()
+    private val importedImages = mutableMapOf<String, ImageState>()
+    val canUndo: Boolean get() = historyVersion.let { history.canUndo }
+    val canRedo: Boolean get() = historyVersion.let { history.canRedo }
+
     val wordCount by derivedStateOf {
         blocks.sumOf { block ->
             countWords(block.value.text) + (block.table?.grid?.rows?.sumOf { row -> row.sumOf { countWords(it.text) } } ?: 0)
@@ -127,6 +139,7 @@ class EditorViewModel @Inject constructor(
     val saveStatus: StateFlow<SaveStatus> = autoSaver.status
 
     init {
+        history.onChanged = { historyVersion = history.version }
         viewModelScope.launch { load() }
     }
 
@@ -149,6 +162,7 @@ class EditorViewModel @Inject constructor(
     }
 
     fun onTitleChange(value: TextFieldValue) {
+        if (value.text != title.text) history.record(historyEntry(), TITLE_TYPING)
         if (value.text.contains('\n')) {
             // Enter in the title jumps to the text instead of inserting a line break.
             title = value.copy(text = value.text.replace("\n", ""), selection = TextRange(value.text.indexOf('\n')))
@@ -163,13 +177,24 @@ class EditorViewModel @Inject constructor(
     fun onBlockChange(block: EditorBlock, value: TextFieldValue) {
         val old = block.value.text
         val textChanged = value.text != old
-        if (!textChanged || !block.kind.isText) {
-            val caretMoved = !textChanged && value.selection != block.value.selection
+        if (!textChanged) {
+            if (value.selection != block.value.selection) {
+                typingStyle = null
+                history.breakCoalescing()
+            }
             block.setValue(value, typingStyle)
-            if (textChanged) markDirty(block.id)
-            if (caretMoved) typingStyle = null
+        } else if (!block.kind.isText) {
+            history.record(historyEntry(), typingKey(block.id, old, value))
+            block.setValue(value, typingStyle)
+            markDirty(block.id)
         } else {
-            apply(editing.type(block, value, typingStyle))
+            val before = historyEntry()
+            val kind = block.kind
+            val key = typingKey(block.id, old, value)
+            val edit = editing.type(block, value, typingStyle)
+            apply(edit)
+            // Enter, pasted lines and markdown shortcuts are steps of their own.
+            history.record(before, key.takeIf { edit is BlockEdit.Content && block.kind == kind })
         }
         updateSlashAnchor(block, typedSlash = textChanged && value.text.length > old.length)
     }
@@ -180,6 +205,7 @@ class EditorViewModel @Inject constructor(
         val query = slashQuery ?: return SlashOutcome.DONE
         slashAnchor = null
         val end = query.slashIndex + 1 + query.filter.length
+        if (command.kind != BlockKind.TABLE) history.record(historyEntry())
         when (command.kind) {
             BlockKind.IMAGE -> {
                 val text = block.rich
@@ -202,6 +228,7 @@ class EditorViewModel @Inject constructor(
      * paragraph after it to continue writing; the caret goes to its first cell.
      */
     fun insertTable(rows: Int, columns: Int, headerRow: Boolean) {
+        history.record(historyEntry())
         val table = TableState.create(rows, columns, headerRow)
         val pending = pendingTableCommand
         pendingTableCommand = null
@@ -237,25 +264,25 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    fun onBackspaceAtStart(block: EditorBlock) {
-        editing.backspaceAtStart(block)?.let(::apply)
-    }
+    fun onBackspaceAtStart(block: EditorBlock) = undoable { editing.backspaceAtStart(block)?.let(::apply) }
 
-    fun onDeleteAtEnd(block: EditorBlock) {
-        editing.deleteAtEnd(block)?.let(::apply)
-    }
+    fun onDeleteAtEnd(block: EditorBlock) = undoable { editing.deleteAtEnd(block)?.let(::apply) }
 
     fun onClearFocusHandled() {
         clearFocusRequest = null
     }
 
     fun onBlockFocused(id: String) {
-        if (id != focusedBlockId) typingStyle = null
+        if (id != focusedBlockId) {
+            typingStyle = null
+            history.breakCoalescing()
+        }
         focusedBlockId = id
         focusedCell = null
     }
 
     fun onCellFocused(block: EditorBlock, cell: CellKey) {
+        if (cell != focusedCell) history.breakCoalescing()
         typingStyle = null
         slashAnchor = null
         focusedBlockId = block.id
@@ -266,6 +293,7 @@ class EditorViewModel @Inject constructor(
         val table = block.table ?: return
         val updated = table.updateCell(cell, text)
         if (updated == table) return
+        history.record(historyEntry(), CellTyping(block.id, cell))
         block.table = updated
         markDirty(block.id)
     }
@@ -282,6 +310,7 @@ class EditorViewModel @Inject constructor(
             !forward -> Unit
             enter -> leaveTable(block)
             else -> {
+                history.record(historyEntry())
                 val (updated, first) = table.appendRow()
                 block.table = updated
                 markDirty(block.id)
@@ -297,6 +326,7 @@ class EditorViewModel @Inject constructor(
         val cell = focusedCell?.takeIf(table::contains) ?: return
         val (updated, caret) = table.apply(action, cell)
         if (updated == table) return
+        history.record(historyEntry())
         block.table = updated
         markDirty(block.id)
         focusedCell = caret
@@ -320,13 +350,18 @@ class EditorViewModel @Inject constructor(
     fun format(change: FormatChange) {
         val block = focusedTextBlock() ?: return
         val before = block.rich
+        val entry = historyEntry()
         typingStyle = block.applyFormat(change, typingStyle)
-        if (block.rich != before) markDirty(block.id)
+        if (block.rich != before) {
+            history.record(entry)
+            markDirty(block.id)
+        }
     }
 
     fun setFocusedAlign(align: TextAlignment) {
         val block = focusedTextBlock() ?: return
         if (block.align == align) return
+        history.record(historyEntry())
         block.align = align
         markDirty(block.id)
     }
@@ -335,6 +370,7 @@ class EditorViewModel @Inject constructor(
     fun setFocusedKind(kind: BlockKind, headingLevel: Int = BlockContent.Heading.MIN_LEVEL) {
         val block = focusedTextBlock() ?: return
         if (!kind.isText || block.kind == kind && (kind != BlockKind.HEADING || block.headingLevel == headingLevel)) return
+        history.record(historyEntry())
         editing.convert(block, kind, headingLevel)
         markDirty(block.id)
     }
@@ -344,6 +380,7 @@ class EditorViewModel @Inject constructor(
         val block = focusedTextBlock()?.takeIf { it.kind == BlockKind.BULLET || it.kind == BlockKind.NUMBERED } ?: return
         val indent = (block.indent + delta).coerceIn(0, BlockContent.ListItem.MAX_INDENT)
         if (indent == block.indent) return
+        history.record(historyEntry())
         block.indent = indent
         markDirty(block.id)
     }
@@ -353,6 +390,7 @@ class EditorViewModel @Inject constructor(
     }
 
     fun addBlock(kind: BlockKind) {
+        history.record(historyEntry())
         val index = blocks.indexOfFirst { it.id == focusedBlockId }.takeIf { it >= 0 }?.plus(1) ?: blocks.size
         val block = newBlock(kind)
         blocks.add(index, block)
@@ -363,6 +401,7 @@ class EditorViewModel @Inject constructor(
     fun deleteFocusedBlock() {
         val block = focusedBlock ?: return
         val index = blocks.indexOf(block)
+        history.record(historyEntry())
         if (blocks.size == 1) {
             block.setRich(RichText.Empty)
             block.kind = BlockKind.PARAGRAPH
@@ -421,6 +460,8 @@ class EditorViewModel @Inject constructor(
         val placeholders = sources.map {
             EditorBlock(UUID.randomUUID().toString(), BlockKind.IMAGE, image = ImageState.Pending)
         }
+        history.record(historyEntry())
+        placeholders.mapTo(importingImages) { it.id }
         blocks.addAll(index.coerceIn(0, blocks.size), placeholders)
         focusedBlockId = placeholders.last().id
 
@@ -429,11 +470,16 @@ class EditorViewModel @Inject constructor(
             appScope.launch {
                 val stored = runCatching { imageStore.import(book, source) }
                 withContext(Dispatchers.Main.immediate) {
+                    importingImages.remove(block.id)
+                    // Undo may have replaced the placeholder with another instance of the same block.
+                    val current = blocks.firstOrNull { it.id == block.id }
                     stored.onSuccess { image ->
-                        block.image = ImageState(image.fileName, image.width, image.height)
+                        val state = ImageState(image.fileName, image.width, image.height)
+                        importedImages[block.id] = state
+                        current?.image = state
                         markStructureDirty()
                     }.onFailure {
-                        blocks.remove(block)
+                        current?.let(blocks::remove)
                         message = EditorMessage.IMAGE_FAILED
                     }
                 }
@@ -451,12 +497,15 @@ class EditorViewModel @Inject constructor(
         val image = block.image ?: return
         val clamped = percent.coerceIn(BlockContent.Image.MIN_WIDTH_PERCENT, BlockContent.Image.MAX_WIDTH_PERCENT)
         if (clamped == image.widthPercent) return
+        history.record(historyEntry(), ImageResize(block.id))
         block.image = image.copy(widthPercent = clamped)
         markDirty(block.id)
     }
 
     fun setImageAlign(block: EditorBlock, align: TextAlignment) {
         val image = block.image ?: return
+        if (image.align == align) return
+        history.record(historyEntry())
         block.image = image.copy(align = align)
         markDirty(block.id)
     }
@@ -465,8 +514,89 @@ class EditorViewModel @Inject constructor(
         val index = blocks.indexOfFirst { it.id == focusedBlockId }
         val target = index + offset
         if (index < 0 || target !in blocks.indices) return
+        history.record(historyEntry())
         blocks.add(target, blocks.removeAt(index))
         markStructureDirty()
+    }
+
+    fun undo() {
+        history.undo(historyEntry())?.let(::restore)
+    }
+
+    fun redo() {
+        history.redo(historyEntry())?.let(::restore)
+    }
+
+    private fun historyEntry(): HistoryEntry {
+        val block = focusedBlock
+        return HistoryEntry(
+            content = ChapterSnapshot(title.text, blocks.map { it.snapshot() }),
+            caret = block?.let { Caret(it.id, it.value.selection, focusedCell.takeIf { _ -> it.kind == BlockKind.TABLE }) },
+        )
+    }
+
+    /** Records an undo step for [action] if it changed the chapter. */
+    private inline fun undoable(action: () -> Unit) {
+        val before = historyEntry()
+        action()
+        if (historyEntry().content != before.content) history.record(before)
+    }
+
+    /** Typing in one block is one step per word; deleting is a step of its own. */
+    private fun typingKey(blockId: String, old: String, value: TextFieldValue): Any {
+        val inserted = value.text.length > old.length
+        val typed = if (inserted) value.text.getOrNull(value.selection.end - 1) else null
+        if (typed != null && !typed.isWhitespace() && lastTypedWhitespace) history.breakCoalescing()
+        lastTypedWhitespace = typed?.isWhitespace() == true
+        return BlockTyping(blockId, inserted)
+    }
+
+    private fun restore(entry: HistoryEntry) {
+        typingStyle = null
+        slashAnchor = null
+        pendingTableCommand = null
+        lastTypedWhitespace = false
+        val content = entry.content
+        if (content.title != title.text) {
+            title = TextFieldValue(content.title, TextRange(content.title.length))
+            synchronized(lock) { titleDirty = true }
+            autoSaver.markDirty()
+        }
+        val result = restoreBlocks(blocks, content.blocks) { id ->
+            importedImages[id] ?: ImageState.Pending.takeIf { id in importingImages }
+        }
+        synchronized(lock) {
+            dirtyIds.removeAll(result.removedIds)
+            deletedIds.addAll(result.removedIds)
+            deletedIds.removeAll(result.addedIds)
+            dirtyIds.addAll(result.changedIds)
+        }
+        if (result.reordered) markStructureDirty() else autoSaver.markDirty()
+        // Only the title changed: the caret stays where it is.
+        if (!result.reordered && result.changedIds.isEmpty()) return
+
+        val caret = entry.caret?.takeIf { caret -> blocks.any { it.id == caret.blockId } }
+        val focusId = caret?.blockId
+            ?: (result.changedIds + result.addedIds).let { ids -> blocks.firstOrNull { it.id in ids }?.id }
+            ?: return
+        val block = blocks.first { it.id == focusId }
+        when {
+            block.kind.isText -> {
+                val length = block.value.text.length
+                val selection = caret?.selection ?: TextRange(length)
+                block.setSelection(TextRange(selection.start.coerceAtMost(length), selection.end.coerceAtMost(length)))
+                focusedBlockId = block.id
+                focusRequest = FocusRequest(block.id)
+            }
+            block.kind == BlockKind.TABLE -> {
+                focusedBlockId = block.id
+                focusRequest = FocusRequest(block.id, caret?.cell)
+            }
+            else -> {
+                selectBlock(block.id)
+                clearFocusRequest = System.nanoTime()
+            }
+        }
     }
 
     fun onMessageShown() {
@@ -555,8 +685,16 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    private data class BlockTyping(val blockId: String, val inserting: Boolean)
+
+    private data class CellTyping(val blockId: String, val cell: CellKey)
+
+    private data class ImageResize(val blockId: String)
+
     private companion object {
         val WHITESPACE = Regex("\\s+")
+        const val TITLE_TYPING = "title"
+        const val TYPING_COALESCE_MILLIS = 2000L
 
         fun countWords(text: String): Int = text.split(WHITESPACE).count { it.isNotEmpty() }
     }
