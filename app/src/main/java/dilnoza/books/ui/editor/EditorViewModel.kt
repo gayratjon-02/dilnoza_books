@@ -23,6 +23,9 @@ import dilnoza.books.domain.repository.BlockRepository
 import dilnoza.books.domain.repository.ChapterRepository
 import dilnoza.books.editor.autosave.AutoSaver
 import dilnoza.books.editor.autosave.SaveStatus
+import dilnoza.books.editor.commands.ListItem
+import dilnoza.books.editor.commands.ListKind
+import dilnoza.books.editor.commands.ListNumbering
 import dilnoza.books.editor.richtext.RichTextEditor
 import dilnoza.books.editor.richtext.split
 import dilnoza.books.editor.richtext.subText
@@ -69,6 +72,17 @@ class EditorViewModel @Inject constructor(
         blocks.sumOf { block ->
             countWords(block.value.text) + (block.table?.grid?.rows?.sumOf { row -> row.sumOf { countWords(it.text) } } ?: 0)
         }
+    }
+    /** Bullet glyph or number shown before each list item, by block id. */
+    val listLabels by derivedStateOf {
+        val items = blocks.map { block ->
+            when (block.kind) {
+                BlockKind.BULLET -> ListItem(ListKind.BULLET, block.indent)
+                BlockKind.NUMBERED -> ListItem(ListKind.ORDERED, block.indent)
+                else -> ListItem.NONE
+            }
+        }
+        blocks.zip(ListNumbering.labels(items)) { block, label -> block.id to label }.toMap()
     }
     val focusedBlock: EditorBlock? get() = blocks.firstOrNull { it.id == focusedBlockId }
 

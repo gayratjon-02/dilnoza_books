@@ -20,6 +20,11 @@
     <string name="editor_align_start">Align left</string>
     <string name="editor_align_center">Align center</string>
     <string name="editor_align_end">Align right</string>
+    <string name="editor_list_hint">List item</string>
+    <string name="editor_quote_hint">Quote</string>
+    <string name="editor_divider">Divider</string>
+    <string name="editor_page_break">Page break</string>
+    <string name="editor_table">Table</string>
     <plurals name="editor_word_count">
         <item quantity="one">%d word</item>
         <item quantity="other">%d words</item>

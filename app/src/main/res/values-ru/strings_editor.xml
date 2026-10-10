@@ -19,6 +19,11 @@
     <string name="editor_align_start">По левому краю</string>
     <string name="editor_align_center">По центру</string>
     <string name="editor_align_end">По правому краю</string>
+    <string name="editor_list_hint">Элемент списка</string>
+    <string name="editor_quote_hint">Цитата</string>
+    <string name="editor_divider">Разделитель</string>
+    <string name="editor_page_break">Разрыв страницы</string>
+    <string name="editor_table">Таблица</string>
     <plurals name="editor_word_count">
         <item quantity="one">%d слово</item>
         <item quantity="few">%d слова</item>

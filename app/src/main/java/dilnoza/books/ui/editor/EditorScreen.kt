@@ -83,7 +83,10 @@ import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.mimeTypes
 import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -94,6 +97,9 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -232,22 +238,27 @@ fun EditorScreen(
                         TitleField(value = viewModel.title, onValueChange = viewModel::onTitleChange)
                     }
                     items(viewModel.blocks, key = { it.id }) { block ->
-                        if (block.kind == BlockKind.IMAGE) {
-                            ImageBlockView(
+                        val selectBlock = {
+                            focusManager.clearFocus()
+                            viewModel.selectBlock(block.id)
+                        }
+                        val selected = viewModel.focusedBlock?.id == block.id
+                        when (block.kind) {
+                            BlockKind.IMAGE -> ImageBlockView(
                                 block = block,
                                 file = block.image?.fileName?.let(viewModel::imageFile),
-                                selected = viewModel.focusedBlock?.id == block.id,
-                                onSelect = {
-                                    focusManager.clearFocus()
-                                    viewModel.selectBlock(block.id)
-                                },
+                                selected = selected,
+                                onSelect = selectBlock,
                                 onResize = { viewModel.setImageWidth(block, it) },
                                 onCaptionChange = { viewModel.onBlockChange(block, it) },
                                 onCaptionFocused = { viewModel.onBlockFocused(block.id) },
                             )
-                        } else {
-                            BlockField(
+                            BlockKind.DIVIDER -> DividerBlockView(selected, selectBlock)
+                            BlockKind.PAGE_BREAK -> PageBreakBlockView(selected, selectBlock)
+                            BlockKind.TABLE -> block.table?.let { TableBlockView(it, selected, selectBlock) }
+                            else -> BlockField(
                                 block = block,
+                                listLabel = viewModel.listLabels[block.id],
                                 onValueChange = { viewModel.onBlockChange(block, it) },
                                 onFocused = { viewModel.onBlockFocused(block.id) },
                                 onImagesPasted = { uris ->
@@ -329,43 +340,75 @@ private fun TitleField(value: TextFieldValue, onValueChange: (TextFieldValue) ->
 @Composable
 private fun BlockField(
     block: EditorBlock,
+    listLabel: String?,
     onValueChange: (TextFieldValue) -> Unit,
     onFocused: () -> Unit,
     onImagesPasted: (List<Uri>) -> Unit,
 ) {
-    val heading = block.kind == BlockKind.HEADING
-    val style = if (heading) headingStyle() else paragraphStyle()
-    BasicTextField(
-        value = block.value,
-        onValueChange = onValueChange,
-        textStyle = style,
-        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+    val kind = block.kind
+    val heading = kind == BlockKind.HEADING
+    val style = blockStyle(kind, block.headingLevel).copy(textAlign = block.align.toTextAlign())
+    val quoteColor = MaterialTheme.colorScheme.primary
+    val hint = when (kind) {
+        BlockKind.HEADING -> R.string.editor_heading_hint
+        BlockKind.BULLET, BlockKind.NUMBERED -> R.string.editor_list_hint
+        BlockKind.QUOTE -> R.string.editor_quote_hint
+        else -> R.string.editor_body_hint
+    }
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = if (heading) 16.dp else 4.dp, bottom = if (heading) 8.dp else 4.dp)
-            .focusRequester(block.focusRequester)
-            .onFocusChanged { if (it.isFocused) onFocused() }
-            // Images pasted from the clipboard or inserted by the keyboard (e.g. a fresh screenshot).
-            .contentReceiver { content ->
-                if (!content.hasMediaType(MediaType.Image)) return@contentReceiver content
-                val uris = mutableListOf<Uri>()
-                val remaining = content.consume { item -> item.uri?.let(uris::add) != null }
-                if (uris.isNotEmpty()) onImagesPasted(uris)
-                remaining
-            },
-        decorationBox = { inner ->
-            Box {
-                if (block.value.text.isEmpty()) {
-                    Placeholder(
-                        text = stringResource(if (heading) R.string.editor_heading_hint else R.string.editor_body_hint),
-                        style = style,
-                    )
+            .then(
+                if (kind == BlockKind.QUOTE) {
+                    Modifier
+                        .drawBehind {
+                            val width = 3.dp.toPx()
+                            val x = if (layoutDirection == LayoutDirection.Ltr) 0f else size.width - width
+                            drawRect(quoteColor, topLeft = Offset(x, 0f), size = Size(width, size.height))
+                        }
+                        .padding(start = 16.dp)
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        if (listLabel != null) {
+            Text(
+                text = listLabel,
+                style = style.copy(textAlign = TextAlign.End),
+                modifier = Modifier
+                    .padding(start = LIST_INDENT * block.indent, end = 8.dp)
+                    .width(LIST_MARKER_WIDTH),
+            )
+        }
+        BasicTextField(
+            value = block.value,
+            onValueChange = onValueChange,
+            textStyle = style,
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(block.focusRequester)
+                .onFocusChanged { if (it.isFocused) onFocused() }
+                // Images pasted from the clipboard or inserted by the keyboard (e.g. a fresh screenshot).
+                .contentReceiver { content ->
+                    if (!content.hasMediaType(MediaType.Image)) return@contentReceiver content
+                    val uris = mutableListOf<Uri>()
+                    val remaining = content.consume { item -> item.uri?.let(uris::add) != null }
+                    if (uris.isNotEmpty()) onImagesPasted(uris)
+                    remaining
+                },
+            decorationBox = { inner ->
+                // The inner field only fills the width (and so honours text alignment) under a min width.
+                Box(Modifier.fillMaxWidth(), propagateMinConstraints = true) {
+                    if (block.value.text.isEmpty()) Placeholder(stringResource(hint), style)
+                    inner()
                 }
-                inner()
-            }
-        },
-    )
+            },
+        )
+    }
 }
 
 @Composable
@@ -374,9 +417,25 @@ private fun Placeholder(text: String, style: TextStyle) {
 }
 
 @Composable
-private fun headingStyle(): TextStyle = MaterialTheme.typography.headlineSmall.copy(
-    color = MaterialTheme.colorScheme.onSurface,
-)
+private fun blockStyle(kind: BlockKind, headingLevel: Int): TextStyle = when (kind) {
+    BlockKind.HEADING -> when (headingLevel) {
+        1 -> MaterialTheme.typography.headlineSmall
+        2 -> MaterialTheme.typography.titleLarge
+        else -> MaterialTheme.typography.titleMedium
+    }.copy(color = MaterialTheme.colorScheme.onSurface)
+    BlockKind.QUOTE -> paragraphStyle().copy(
+        fontStyle = FontStyle.Italic,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    else -> paragraphStyle()
+}
+
+private fun TextAlignment.toTextAlign(): TextAlign = when (this) {
+    TextAlignment.START -> TextAlign.Start
+    TextAlignment.CENTER -> TextAlign.Center
+    TextAlignment.END -> TextAlign.End
+    TextAlignment.JUSTIFY -> TextAlign.Justify
+}
 
 @Composable
 private fun paragraphStyle(): TextStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -554,4 +613,6 @@ private fun dropIndex(listState: LazyListState, viewModel: EditorViewModel, y: F
 }
 
 private const val MAX_PICKED_IMAGES = 10
+private val LIST_INDENT = 24.dp
+private val LIST_MARKER_WIDTH = 28.dp
 private val WIDTH_PRESETS = listOf(25, 50, 75, 100)
