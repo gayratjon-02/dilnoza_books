@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import dilnoza.books.domain.model.Block
@@ -74,6 +75,8 @@ class EditorBlock(
     var image by mutableStateOf(image)
     var table by mutableStateOf(table)
     val focusRequester = FocusRequester()
+    /** The field's last text layout, to scroll a search match into view; not state, it changes every frame. */
+    var textLayout: TextLayoutResult? = null
     // One per table cell, made on first use so a focus request can name a cell before it is composed.
     private val cellFocusRequesters = mutableMapOf<CellKey, FocusRequester>()
 

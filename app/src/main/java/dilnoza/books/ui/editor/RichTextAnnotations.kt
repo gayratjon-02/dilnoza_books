@@ -46,7 +46,8 @@ private fun fontFamilyOf(name: String): FontFamily? = when (name) {
 }
 
 /**
- * Draws [rich]'s styles over the field's plain text and hides the first [hiddenPrefix] characters
+ * Draws [rich]'s styles, plus temporary [marks] such as search matches, over the field's plain text and
+ * hides the first [hiddenPrefix] characters
  * (the block field's sentinel). The rest is never changed, so the caret cannot move. If the field is a
  * frame ahead of [rich] (the text no longer matches), the text is drawn plain for that frame instead
  * of with misplaced styles.
@@ -55,8 +56,11 @@ class RichTextTransformation(
     private val rich: RichText,
     private val darkTheme: Boolean,
     private val hiddenPrefix: Int = 0,
+    private val marks: List<AnnotatedString.Range<SpanStyle>> = emptyList(),
 ) : VisualTransformation {
-    private val styled = rich.toAnnotatedString(darkTheme)
+    private val styled = rich.toAnnotatedString(darkTheme).let {
+        if (marks.isEmpty()) it else AnnotatedString(it.text, it.spanStyles + marks)
+    }
 
     override fun filter(text: AnnotatedString): TransformedText {
         val prefix = hiddenPrefix.coerceAtMost(text.length)
@@ -74,7 +78,7 @@ class RichTextTransformation(
     }
 
     override fun equals(other: Any?): Boolean = other is RichTextTransformation &&
-        other.rich == rich && other.darkTheme == darkTheme && other.hiddenPrefix == hiddenPrefix
+        other.rich == rich && other.darkTheme == darkTheme && other.hiddenPrefix == hiddenPrefix && other.marks == marks
 
-    override fun hashCode(): Int = (31 * rich.hashCode() + darkTheme.hashCode()) * 31 + hiddenPrefix
+    override fun hashCode(): Int = ((31 * rich.hashCode() + darkTheme.hashCode()) * 31 + hiddenPrefix) * 31 + marks.hashCode()
 }

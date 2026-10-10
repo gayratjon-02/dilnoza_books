@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="find_open">Найти и заменить</string>
+    <string name="find_hint">Найти</string>
+    <string name="find_replace_hint">Заменить на</string>
+    <string name="find_previous">Предыдущее совпадение</string>
+    <string name="find_next">Следующее совпадение</string>
+    <string name="find_close">Закрыть поиск</string>
+    <string name="find_replace">Заменить</string>
+    <string name="find_replace_all_short">Все</string>
+    <string name="find_replace_all">Заменить все</string>
+</resources>

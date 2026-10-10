@@ -3,6 +3,7 @@ package dilnoza.books.ui.editor
 import android.os.ParcelFileDescriptor
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,8 @@ import dilnoza.books.editor.commands.ListNumbering
 import dilnoza.books.editor.commands.SlashCommands
 import dilnoza.books.editor.commands.SlashQuery
 import dilnoza.books.editor.history.UndoManager
+import dilnoza.books.editor.search.SearchMatch
+import dilnoza.books.editor.search.TextSearch
 import dilnoza.books.editor.richtext.plus
 import dilnoza.books.editor.richtext.subText
 import dilnoza.books.ui.navigation.EditorRoute
@@ -95,6 +98,26 @@ class EditorViewModel @Inject constructor(
     // Pictures still being imported, and those already stored, so undo can bring a placeholder back right.
     private val importingImages = mutableSetOf<String>()
     private val importedImages = mutableMapOf<String, ImageState>()
+    var searchOpen by mutableStateOf(false)
+        private set
+    var searchQuery by mutableStateOf("")
+        private set
+    var replacement by mutableStateOf("")
+        private set
+    private var matchIndex by mutableIntStateOf(0)
+    /** Matches of the search in the text blocks, in reading order; highlighted only while searching. */
+    val searchMatches by derivedStateOf {
+        val query = searchQuery
+        if (!searchOpen || query.isEmpty()) {
+            emptyList()
+        } else {
+            TextSearch.findAll(blocks.filter { it.kind.isText }.map { it.id to it.value.text }, query)
+        }
+    }
+    val matchesByBlock by derivedStateOf {
+        searchMatches.groupBy({ it.unitId }, { it.start until it.end })
+    }
+    val currentMatch: SearchMatch? get() = searchMatches.getOrNull(currentMatchIndex())
     val canUndo: Boolean get() = historyVersion.let { history.canUndo }
     val canRedo: Boolean get() = historyVersion.let { history.canRedo }
 
@@ -609,6 +632,78 @@ class EditorViewModel @Inject constructor(
                 clearFocusRequest = System.nanoTime()
             }
         }
+    }
+
+    fun openSearch() {
+        searchOpen = true
+        val block = focusedTextBlock() ?: return
+        val selection = block.value.selection
+        val selected = block.value.text.substring(selection.min, selection.max)
+        if (selected.isNotBlank() && '\n' !in selected) onSearchQueryChange(selected)
+    }
+
+    fun closeSearch() {
+        searchOpen = false
+    }
+
+    /** Changes the search; the current match becomes the first one at or after the caret. */
+    fun onSearchQueryChange(query: String) {
+        searchQuery = query
+        val block = focusedTextBlock()
+        val order = blocks.indexOf(block)
+        val caret = block?.value?.selection?.min ?: 0
+        matchIndex = firstMatchFrom(order, caret)
+    }
+
+    fun onReplacementChange(text: String) {
+        replacement = text
+    }
+
+    fun nextMatch() = stepMatch(1)
+
+    fun previousMatch() = stepMatch(-1)
+
+    private fun stepMatch(delta: Int) {
+        val count = searchMatches.size
+        if (count == 0) return
+        matchIndex = (currentMatchIndex() + delta + count) % count
+    }
+
+    /** Replaces the current match and moves on to the next one. */
+    fun replaceCurrent() {
+        val match = currentMatch ?: return
+        val block = blocks.firstOrNull { it.id == match.unitId } ?: return
+        history.record(historyEntry())
+        val replaced = block.rich.replaceMatches(listOf(match), replacement, block.value.selection)
+        block.setRich(replaced.rich, replaced.selection)
+        markDirty(block.id)
+        matchIndex = firstMatchFrom(blocks.indexOf(block), match.start + replacement.length)
+    }
+
+    /** Replaces every match in one undo step. */
+    fun replaceAll() {
+        val byBlock = searchMatches.groupBy { it.unitId }
+        if (byBlock.isEmpty()) return
+        history.record(historyEntry())
+        for ((id, matches) in byBlock) {
+            val block = blocks.firstOrNull { it.id == id } ?: continue
+            val replaced = block.rich.replaceMatches(matches, replacement, block.value.selection)
+            block.setRich(replaced.rich, replaced.selection)
+            markDirty(block.id)
+        }
+        matchIndex = 0
+    }
+
+    private fun currentMatchIndex(): Int = matchIndex.coerceIn(0, (searchMatches.size - 1).coerceAtLeast(0))
+
+    /** Index of the first match at or after [offset] in the block at [order], wrapping to the start. */
+    private fun firstMatchFrom(order: Int, offset: Int): Int {
+        val orderOf = blocks.withIndex().associate { (index, block) -> block.id to index }
+        val index = searchMatches.indexOfFirst {
+            val matchOrder = orderOf[it.unitId] ?: -1
+            matchOrder > order || matchOrder == order && it.start >= offset
+        }
+        return index.coerceAtLeast(0)
     }
 
     fun onMessageShown() {

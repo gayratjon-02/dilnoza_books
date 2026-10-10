@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="find_open">Topish va almashtirish</string>
+    <string name="find_hint">Topish</string>
+    <string name="find_replace_hint">Bunga almashtirish</string>
+    <string name="find_previous">Oldingi moslik</string>
+    <string name="find_next">Keyingi moslik</string>
+    <string name="find_close">Qidiruvni yopish</string>
+    <string name="find_replace">Almashtirish</string>
+    <string name="find_replace_all_short">Barchasi</string>
+    <string name="find_replace_all">Barchasini almashtirish</string>
+</resources>

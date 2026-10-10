@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="find_open">Find and replace</string>
+    <string name="find_hint">Find</string>
+    <string name="find_replace_hint">Replace with</string>
+    <string name="find_previous">Previous match</string>
+    <string name="find_next">Next match</string>
+    <string name="find_close">Close search</string>
+    <string name="find_replace">Replace</string>
+    <string name="find_replace_all_short">All</string>
+    <string name="find_replace_all">Replace all</string>
+    <string name="find_counter" translatable="false">%1$d/%2$d</string>
+</resources>

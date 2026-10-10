@@ -2,6 +2,7 @@ package dilnoza.books.ui.editor
 
 import android.content.ClipDescription
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.FormatAlignCenter
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.Title
@@ -113,6 +115,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -122,6 +126,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -134,6 +139,7 @@ import dilnoza.books.editor.autosave.SaveStatus
 import dilnoza.books.editor.commands.SlashCommands
 import dilnoza.books.editor.commands.SlashQuery
 import dilnoza.books.editor.richtext.StyleAttribute
+import dilnoza.books.editor.search.SearchMatch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -152,6 +158,7 @@ fun EditorScreen(
     var listBottomInRoot by remember { mutableFloatStateOf(0f) }
     var dropHovering by remember { mutableStateOf(false) }
     var pickTableSize by rememberSaveable { mutableStateOf(false) }
+    var findFocused by remember { mutableStateOf(false) }
 
     val pickImages = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(MAX_PICKED_IMAGES),
@@ -206,6 +213,13 @@ fun EditorScreen(
         if (viewModel.clearFocusRequest == null) return@LaunchedEffect
         focusManager.clearFocus()
         viewModel.onClearFocusHandled()
+    }
+
+    BackHandler(enabled = viewModel.searchOpen) { viewModel.closeSearch() }
+
+    val match = viewModel.currentMatch
+    LaunchedEffect(match) {
+        if (match != null) scrollToMatch(listState, viewModel, match, density)
     }
 
     val request = viewModel.focusRequest
@@ -266,6 +280,9 @@ fun EditorScreen(
                 },
                 actions = {
                     SaveIndicator(saveStatus, Modifier.padding(end = 4.dp))
+                    IconButton(onClick = viewModel::openSearch) {
+                        Icon(Icons.Outlined.Search, contentDescription = stringResource(R.string.find_open))
+                    }
                     IconButton(onClick = viewModel::undo, enabled = viewModel.canUndo) {
                         Icon(Icons.AutoMirrored.Outlined.Undo, contentDescription = stringResource(R.string.editor_undo))
                     }
@@ -284,6 +301,23 @@ fun EditorScreen(
                 .imePadding(),
         ) {
             if (viewModel.loaded) {
+                if (viewModel.searchOpen) {
+                    FindBar(
+                        query = viewModel.searchQuery,
+                        replacement = viewModel.replacement,
+                        current = viewModel.currentMatch?.let { viewModel.searchMatches.indexOf(it) + 1 } ?: 0,
+                        total = viewModel.searchMatches.size,
+                        onQueryChange = viewModel::onSearchQueryChange,
+                        onReplacementChange = viewModel::onReplacementChange,
+                        onPrevious = viewModel::previousMatch,
+                        onNext = viewModel::nextMatch,
+                        onReplace = viewModel::replaceCurrent,
+                        onReplaceAll = viewModel::replaceAll,
+                        onClose = viewModel::closeSearch,
+                        onFocusChanged = { findFocused = it },
+                    )
+                    HorizontalDivider()
+                }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
@@ -343,6 +377,8 @@ fun EditorScreen(
                             else -> BlockField(
                                 block = block,
                                 listLabel = viewModel.listLabels[block.id],
+                                searchMarks = viewModel.matchesByBlock[block.id].orEmpty(),
+                                currentMark = viewModel.currentMatch?.takeIf { it.unitId == block.id }?.let { it.start until it.end },
                                 onValueChange = { viewModel.onBlockChange(block, it) },
                                 onBackspaceAtStart = { viewModel.onBackspaceAtStart(block) },
                                 onDeleteAtEnd = { viewModel.onDeleteAtEnd(block) },
@@ -384,7 +420,9 @@ fun EditorScreen(
                 }
                 HorizontalDivider()
                 val focused = viewModel.focusedBlock
-                if (focused != null && focused.kind == BlockKind.IMAGE && !focused.isPendingImage) {
+                if (findFocused && viewModel.searchOpen) {
+                    // Typing a search needs the room; the block tools come back with the caret.
+                } else if (focused != null && focused.kind == BlockKind.IMAGE && !focused.isPendingImage) {
                     ImageToolbar(
                         image = checkNotNull(focused.image),
                         onAlign = { viewModel.setImageAlign(focused, it) },
@@ -482,6 +520,8 @@ private fun TitleField(value: TextFieldValue, onValueChange: (TextFieldValue) ->
 private fun BlockField(
     block: EditorBlock,
     listLabel: String?,
+    searchMarks: List<IntRange>,
+    currentMark: IntRange?,
     onValueChange: (TextFieldValue) -> Unit,
     onBackspaceAtStart: () -> Unit,
     onDeleteAtEnd: () -> Unit,
@@ -510,7 +550,18 @@ private fun BlockField(
         },
     )
     val darkTheme = isDarkPage()
-    val transformation = remember(rich, darkTheme) { RichTextTransformation(rich, darkTheme, hiddenPrefix = 1) }
+    val colors = MaterialTheme.colorScheme
+    val marks = remember(searchMarks, currentMark, colors) {
+        searchMarks.map { range ->
+            val style = if (range == currentMark) {
+                SpanStyle(background = colors.tertiary, color = colors.onTertiary)
+            } else {
+                SpanStyle(background = colors.tertiaryContainer, color = colors.onTertiaryContainer)
+            }
+            AnnotatedString.Range(style, range.first, range.last + 1)
+        }
+    }
+    val transformation = remember(rich, darkTheme, marks) { RichTextTransformation(rich, darkTheme, hiddenPrefix = 1, marks = marks) }
     val fieldValue = remember(block.value) { block.value.toFieldValue() }
     val labels = SlashCommand.entries.associateWith { it.label() }
     val commands = remember(slashQuery?.filter, labels) {
@@ -572,7 +623,10 @@ private fun BlockField(
                 }
             },
             textStyle = style,
-            onTextLayout = { layout = it },
+            onTextLayout = {
+                layout = it
+                block.textLayout = it
+            },
             visualTransformation = transformation,
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -861,6 +915,31 @@ private fun AlignButton(
 ) {
     IconToggleButton(checked = selected, onCheckedChange = { onClick() }) {
         Icon(icon, contentDescription = stringResource(label))
+    }
+}
+
+/** Scrolls so the search [match] sits in the upper part of the view, unless it is already well in view. */
+private suspend fun scrollToMatch(listState: LazyListState, viewModel: EditorViewModel, match: SearchMatch, density: Density) {
+    val index = viewModel.blocks.indexOfFirst { it.id == match.unitId }
+    if (index < 0) return
+    // +1 skips the chapter title item.
+    val item = index + 1
+    val layout = viewModel.blocks[index].textLayout
+    val top = layout?.takeIf { match.start < it.layoutInput.text.length }?.getBoundingBox(match.start)?.top?.toInt() ?: 0
+    val bottom = layout?.takeIf { match.start < it.layoutInput.text.length }?.getBoundingBox(match.start)?.bottom?.toInt() ?: 0
+    val info = listState.layoutInfo
+    val viewport = info.viewportEndOffset - info.viewportStartOffset
+    val margin = with(density) { MIN_VISIBLE_BLOCK.roundToPx() }
+    val shown = info.visibleItemsInfo.firstOrNull { it.index == item }
+    if (shown == null) {
+        listState.scrollToItem(item)
+        listState.animateScrollBy((top - viewport / 3).toFloat())
+        return
+    }
+    val matchTop = shown.offset + top
+    val matchBottom = shown.offset + bottom
+    if (matchTop < info.viewportStartOffset + margin || matchBottom > info.viewportEndOffset - margin) {
+        listState.animateScrollBy((matchTop - info.viewportStartOffset - viewport / 3).toFloat())
     }
 }
 
