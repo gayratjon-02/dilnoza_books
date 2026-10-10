@@ -22,6 +22,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id")
     fun observe(id: String): Flow<BookEntity?>
 
+    @Query("SELECT EXISTS(SELECT 1 FROM books WHERE id = :id)")
+    suspend fun exists(id: String): Boolean
+
     @Insert
     suspend fun insert(book: BookEntity)
 

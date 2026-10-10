@@ -5,6 +5,7 @@ import dilnoza.books.core.time.Clock
 import dilnoza.books.data.db.AppDatabase
 import dilnoza.books.data.db.entity.BookEntity
 import dilnoza.books.data.db.entity.ChapterEntity
+import dilnoza.books.data.files.ImageStore
 import dilnoza.books.data.mapper.toDomain
 import dilnoza.books.domain.model.Book
 import dilnoza.books.domain.model.BookSummary
@@ -20,6 +21,7 @@ import javax.inject.Inject
 class BookRepositoryImpl @Inject constructor(
     private val db: AppDatabase,
     private val clock: Clock,
+    private val imageStore: ImageStore,
 ) : BookRepository {
 
     private val bookDao = db.bookDao()
@@ -73,6 +75,7 @@ class BookRepositoryImpl @Inject constructor(
 
     override suspend fun deleteBook(id: String) {
         bookDao.delete(id)
+        imageStore.deleteBook(id)
     }
 
     private fun coverColorFor(id: String): Int = COVER_COLORS[Math.floorMod(id.hashCode(), COVER_COLORS.size)]
