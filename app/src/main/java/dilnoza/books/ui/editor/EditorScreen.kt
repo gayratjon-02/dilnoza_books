@@ -52,6 +52,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FormatAlignCenter
+import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
@@ -75,6 +76,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -145,6 +147,7 @@ fun EditorScreen(
     var listTopInRoot by remember { mutableFloatStateOf(0f) }
     var listBottomInRoot by remember { mutableFloatStateOf(0f) }
     var dropHovering by remember { mutableStateOf(false) }
+    var pickTableSize by rememberSaveable { mutableStateOf(false) }
 
     val pickImages = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(MAX_PICKED_IMAGES),
@@ -325,10 +328,12 @@ fun EditorScreen(
                                 visibleTop = listTopInRoot,
                                 visibleBottom = listBottomInRoot,
                                 onSlashCommand = { command ->
-                                    if (viewModel.runSlashCommand(command)) {
-                                        pickImages.launch(
+                                    when (viewModel.runSlashCommand(command)) {
+                                        SlashOutcome.PICK_IMAGES -> pickImages.launch(
                                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                                         )
+                                        SlashOutcome.PICK_TABLE_SIZE -> pickTableSize = true
+                                        SlashOutcome.DONE -> Unit
                                     }
                                 },
                                 onSlashDismiss = viewModel::dismissSlashMenu,
@@ -401,11 +406,25 @@ fun EditorScreen(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
                         },
+                        onAddTable = { pickTableSize = true },
                         onDelete = viewModel::deleteFocusedBlock,
                     )
                 }
             }
         }
+    }
+
+    if (pickTableSize) {
+        TableSizeDialog(
+            onConfirm = { rows, columns, headerRow ->
+                pickTableSize = false
+                viewModel.insertTable(rows, columns, headerRow)
+            },
+            onDismiss = {
+                pickTableSize = false
+                viewModel.cancelTableSize()
+            },
+        )
     }
 }
 
@@ -665,6 +684,7 @@ private fun EditorToolbar(
     onAddParagraph: () -> Unit,
     onAddHeading: () -> Unit,
     onAddImage: () -> Unit,
+    onAddTable: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Surface(tonalElevation = 2.dp) {
@@ -698,6 +718,11 @@ private fun EditorToolbar(
                     onClick = onAddImage,
                     label = { Text(stringResource(R.string.editor_add_image)) },
                     leadingIcon = { Icon(Icons.Outlined.AddPhotoAlternate, contentDescription = null) },
+                )
+                AssistChip(
+                    onClick = onAddTable,
+                    label = { Text(stringResource(R.string.editor_table)) },
+                    leadingIcon = { Icon(Icons.Outlined.TableChart, contentDescription = null) },
                 )
             }
             Spacer(Modifier.width(8.dp))

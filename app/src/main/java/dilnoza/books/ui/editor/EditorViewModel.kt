@@ -46,6 +46,9 @@ data class FocusRequest(val blockId: String, val cell: CellKey? = null, val toke
 
 enum class EditorMessage { IMAGE_FAILED }
 
+/** What the screen must do after a "/" command: nothing, or ask for pictures or a table size. */
+enum class SlashOutcome { DONE, PICK_IMAGES, PICK_TABLE_SIZE }
+
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -78,6 +81,8 @@ class EditorViewModel @Inject constructor(
         private set
     // Where the writer typed "/" to open the command menu; the menu stays while that query is active.
     private var slashAnchor by mutableStateOf<Pair<String, Int>?>(null)
+    // A "/table" command waiting for its size: the block and the command text the table replaces.
+    private var pendingTableCommand: Triple<String, Int, Int>? = null
     // Style chosen with a collapsed caret, given to the next typed characters until the caret moves.
     private var typingStyle by mutableStateOf<SpanStyleData?>(null)
 
@@ -169,20 +174,52 @@ class EditorViewModel @Inject constructor(
         updateSlashAnchor(block, typedSlash = textChanged && value.text.length > old.length)
     }
 
-    /** Runs a "/" menu command; returns true when the caller should let the writer pick pictures. */
-    fun runSlashCommand(command: SlashCommand): Boolean {
-        val block = focusedTextBlock() ?: return false
-        val query = slashQuery ?: return false
+    /** Runs a "/" menu command; the outcome says whether the screen must ask for pictures or a table size. */
+    fun runSlashCommand(command: SlashCommand): SlashOutcome {
+        val block = focusedTextBlock() ?: return SlashOutcome.DONE
+        val query = slashQuery ?: return SlashOutcome.DONE
         slashAnchor = null
         val end = query.slashIndex + 1 + query.filter.length
-        if (command.kind == BlockKind.IMAGE) {
-            val text = block.rich
-            block.setRich(text.subText(0, query.slashIndex) + text.subText(end, text.text.length), TextRange(query.slashIndex))
-            markDirty(block.id)
-            return true
+        when (command.kind) {
+            BlockKind.IMAGE -> {
+                val text = block.rich
+                block.setRich(text.subText(0, query.slashIndex) + text.subText(end, text.text.length), TextRange(query.slashIndex))
+                markDirty(block.id)
+                return SlashOutcome.PICK_IMAGES
+            }
+            // The command text stays until a size is picked, so cancelling leaves the text as typed.
+            BlockKind.TABLE -> {
+                pendingTableCommand = Triple(block.id, query.slashIndex, end)
+                return SlashOutcome.PICK_TABLE_SIZE
+            }
+            else -> apply(editing.insert(block, query.slashIndex, end, command.kind, command.headingLevel))
         }
-        apply(editing.insert(block, query.slashIndex, end, command.kind, command.headingLevel))
-        return false
+        return SlashOutcome.DONE
+    }
+
+    /**
+     * Inserts a table in place of a pending "/table" command, or else where pictures would go, with a
+     * paragraph after it to continue writing; the caret goes to its first cell.
+     */
+    fun insertTable(rows: Int, columns: Int, headerRow: Boolean) {
+        val table = TableState.create(rows, columns, headerRow)
+        val pending = pendingTableCommand
+        pendingTableCommand = null
+        val commandBlock = pending?.let { (id, _, end) ->
+            blocks.firstOrNull { it.id == id }?.takeIf { it.kind.isText && end <= it.rich.text.length }
+        }
+        if (pending != null && commandBlock != null) {
+            apply(editing.insert(commandBlock, pending.second, pending.third, BlockKind.TABLE, table = table))
+            return
+        }
+        val block = EditorBlock(UUID.randomUUID().toString(), BlockKind.TABLE, table = table)
+        blocks.add(insertionIndex(), block)
+        editing.textBlockAfter(block)
+        apply(BlockEdit.Structure(focusId = block.id))
+    }
+
+    fun cancelTableSize() {
+        pendingTableCommand = null
     }
 
     fun dismissSlashMenu() {

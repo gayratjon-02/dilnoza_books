@@ -38,4 +38,13 @@
     <string name="table_column_after">Keyiniga ustun</string>
     <string name="table_delete_column">Ustunni oʻchirish</string>
     <string name="table_delete">Jadvalni oʻchirish</string>
+    <string name="table_insert_title">Jadval qoʻshish</string>
+    <string name="table_insert">Qoʻshish</string>
+    <string name="table_rows">Qatorlar</string>
+    <string name="table_columns">Ustunlar</string>
+    <string name="table_fewer_rows">Kamroq qator</string>
+    <string name="table_more_rows">Koʻproq qator</string>
+    <string name="table_fewer_columns">Kamroq ustun</string>
+    <string name="table_more_columns">Koʻproq ustun</string>
+    <string name="table_size">Jadval: %1$d qator, %2$d ustun</string>
 </resources>

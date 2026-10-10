@@ -39,4 +39,13 @@
     <string name="table_column_after">Column after</string>
     <string name="table_delete_column">Delete column</string>
     <string name="table_delete">Delete table</string>
+    <string name="table_insert_title">Insert table</string>
+    <string name="table_insert">Insert</string>
+    <string name="table_rows">Rows</string>
+    <string name="table_columns">Columns</string>
+    <string name="table_fewer_rows">Fewer rows</string>
+    <string name="table_more_rows">More rows</string>
+    <string name="table_fewer_columns">Fewer columns</string>
+    <string name="table_more_columns">More columns</string>
+    <string name="table_size">Table, %1$d rows by %2$d columns</string>
 </resources>

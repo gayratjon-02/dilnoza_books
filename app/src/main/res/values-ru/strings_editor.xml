@@ -40,4 +40,13 @@
     <string name="table_column_after">Столбец после</string>
     <string name="table_delete_column">Удалить столбец</string>
     <string name="table_delete">Удалить таблицу</string>
+    <string name="table_insert_title">Вставить таблицу</string>
+    <string name="table_insert">Вставить</string>
+    <string name="table_rows">Строки</string>
+    <string name="table_columns">Столбцы</string>
+    <string name="table_fewer_rows">Меньше строк</string>
+    <string name="table_more_rows">Больше строк</string>
+    <string name="table_fewer_columns">Меньше столбцов</string>
+    <string name="table_more_columns">Больше столбцов</string>
+    <string name="table_size">Таблица: строк %1$d, столбцов %2$d</string>
 </resources>
