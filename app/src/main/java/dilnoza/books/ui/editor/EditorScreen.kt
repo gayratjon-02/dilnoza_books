@@ -1,6 +1,19 @@
 package dilnoza.books.ui.editor
 
+import android.content.ClipDescription
+import android.net.Uri
+import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.content.MediaType
+import androidx.compose.foundation.content.consume
+import androidx.compose.foundation.content.contentReceiver
+import androidx.compose.foundation.content.hasMediaType
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -27,32 +41,55 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.automirrored.outlined.FormatAlignLeft
+import androidx.compose.material.icons.automirrored.outlined.FormatAlignRight
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.FormatAlignCenter
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.mimeTypes
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -66,9 +103,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dilnoza.books.R
+import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.editor.autosave.SaveStatus
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun EditorScreen(
     onBack: () -> Unit,
@@ -76,6 +114,53 @@ fun EditorScreen(
 ) {
     val saveStatus by viewModel.saveStatus.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val resolver = LocalContext.current.contentResolver
+    val activity = LocalActivity.current
+    val focusManager = LocalFocusManager.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    var listTopInRoot by remember { mutableFloatStateOf(0f) }
+    var dropHovering by remember { mutableStateOf(false) }
+
+    val pickImages = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(MAX_PICKED_IMAGES),
+    ) { uris -> viewModel.insertImages(resolver.openImageSources(uris)) }
+
+    val dropTarget = remember(viewModel, resolver, activity) {
+        object : DragAndDropTarget {
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                val dragEvent = event.toAndroidDragEvent()
+                // Grants read access to content dragged in from other apps for as long as we hold it.
+                val permissions = activity?.requestDragAndDropPermissions(dragEvent)
+                val sources = resolver.openImageSources(dragEvent.clipData.imageUris(resolver))
+                permissions?.release()
+                dropHovering = false
+                if (sources.isEmpty()) return false
+                val index = dropIndex(listState, viewModel, dragEvent.y - listTopInRoot)
+                viewModel.insertImages(sources, index)
+                return true
+            }
+
+            override fun onEntered(event: DragAndDropEvent) {
+                dropHovering = true
+            }
+
+            override fun onExited(event: DragAndDropEvent) {
+                dropHovering = false
+            }
+
+            override fun onEnded(event: DragAndDropEvent) {
+                dropHovering = false
+            }
+        }
+    }
+
+    val imageFailed = stringResource(R.string.editor_image_failed)
+    LaunchedEffect(viewModel.message) {
+        if (viewModel.message == EditorMessage.IMAGE_FAILED) {
+            snackbarHostState.showSnackbar(imageFailed)
+            viewModel.onMessageShown()
+        }
+    }
 
     // Leaving the app must never lose text, even if the process is killed afterwards.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.flush() }
@@ -101,6 +186,7 @@ fun EditorScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {},
@@ -125,18 +211,50 @@ fun EditorScreen(
                     state = listState,
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .onGloballyPositioned { listTopInRoot = it.positionInRoot().y }
+                        .dragAndDropTarget(
+                            shouldStartDragAndDrop = { event ->
+                                event.mimeTypes().any { ClipDescription.compareMimeTypes(it, "image/*") }
+                            },
+                            target = dropTarget,
+                        )
+                        .then(
+                            if (dropHovering) {
+                                Modifier.border(2.dp, MaterialTheme.colorScheme.primary)
+                            } else {
+                                Modifier
+                            },
+                        ),
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                 ) {
                     item(key = "title") {
                         TitleField(value = viewModel.title, onValueChange = viewModel::onTitleChange)
                     }
                     items(viewModel.blocks, key = { it.id }) { block ->
-                        BlockField(
-                            block = block,
-                            onValueChange = { viewModel.onBlockChange(block, it) },
-                            onFocused = { viewModel.onBlockFocused(block.id) },
-                        )
+                        if (block.kind == BlockKind.IMAGE) {
+                            ImageBlockView(
+                                block = block,
+                                file = block.image?.fileName?.let(viewModel::imageFile),
+                                selected = viewModel.focusedBlock?.id == block.id,
+                                onSelect = {
+                                    focusManager.clearFocus()
+                                    viewModel.selectBlock(block.id)
+                                },
+                                onResize = { viewModel.setImageWidth(block, it) },
+                                onCaptionChange = { viewModel.onBlockChange(block, it) },
+                                onCaptionFocused = { viewModel.onBlockFocused(block.id) },
+                            )
+                        } else {
+                            BlockField(
+                                block = block,
+                                onValueChange = { viewModel.onBlockChange(block, it) },
+                                onFocused = { viewModel.onBlockFocused(block.id) },
+                                onImagesPasted = { uris ->
+                                    viewModel.insertImages(resolver.openImageSources(uris))
+                                },
+                            )
+                        }
                     }
                     item(key = "tail") {
                         // Tapping the empty space below the text continues writing at the end.
@@ -153,14 +271,34 @@ fun EditorScreen(
                     }
                 }
                 HorizontalDivider()
-                EditorToolbar(
-                    wordCount = viewModel.wordCount,
-                    focusedKind = viewModel.focusedBlock?.kind,
-                    onAddParagraph = { viewModel.addBlock(BlockKind.PARAGRAPH) },
-                    onAddHeading = { viewModel.addBlock(BlockKind.HEADING) },
-                    onToggleKind = viewModel::toggleFocusedKind,
-                    onDelete = viewModel::deleteFocusedBlock,
-                )
+                val focused = viewModel.focusedBlock
+                if (focused != null && focused.kind == BlockKind.IMAGE && !focused.isPendingImage) {
+                    ImageToolbar(
+                        image = checkNotNull(focused.image),
+                        onAlign = { viewModel.setImageAlign(focused, it) },
+                        onWidth = { viewModel.setImageWidth(focused, it) },
+                        onMove = viewModel::moveFocusedBlock,
+                        onDelete = viewModel::deleteFocusedBlock,
+                        onDone = {
+                            focusManager.clearFocus()
+                            viewModel.selectBlock("")
+                        },
+                    )
+                } else {
+                    EditorToolbar(
+                        wordCount = viewModel.wordCount,
+                        focusedKind = focused?.kind,
+                        onAddParagraph = { viewModel.addBlock(BlockKind.PARAGRAPH) },
+                        onAddHeading = { viewModel.addBlock(BlockKind.HEADING) },
+                        onAddImage = {
+                            pickImages.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
+                        onToggleKind = viewModel::toggleFocusedKind,
+                        onDelete = viewModel::deleteFocusedBlock,
+                    )
+                }
             }
         }
     }
@@ -187,11 +325,13 @@ private fun TitleField(value: TextFieldValue, onValueChange: (TextFieldValue) ->
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BlockField(
     block: EditorBlock,
     onValueChange: (TextFieldValue) -> Unit,
     onFocused: () -> Unit,
+    onImagesPasted: (List<Uri>) -> Unit,
 ) {
     val heading = block.kind == BlockKind.HEADING
     val style = if (heading) headingStyle() else paragraphStyle()
@@ -205,7 +345,15 @@ private fun BlockField(
             .fillMaxWidth()
             .padding(top = if (heading) 16.dp else 4.dp, bottom = if (heading) 8.dp else 4.dp)
             .focusRequester(block.focusRequester)
-            .onFocusChanged { if (it.isFocused) onFocused() },
+            .onFocusChanged { if (it.isFocused) onFocused() }
+            // Images pasted from the clipboard or inserted by the keyboard (e.g. a fresh screenshot).
+            .contentReceiver { content ->
+                if (!content.hasMediaType(MediaType.Image)) return@contentReceiver content
+                val uris = mutableListOf<Uri>()
+                val remaining = content.consume { item -> item.uri?.let(uris::add) != null }
+                if (uris.isNotEmpty()) onImagesPasted(uris)
+                remaining
+            },
         decorationBox = { inner ->
             Box {
                 if (block.value.text.isEmpty()) {
@@ -244,6 +392,7 @@ private fun EditorToolbar(
     focusedKind: BlockKind?,
     onAddParagraph: () -> Unit,
     onAddHeading: () -> Unit,
+    onAddImage: () -> Unit,
     onToggleKind: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -281,6 +430,11 @@ private fun EditorToolbar(
                     onClick = onAddHeading,
                     label = { Text(stringResource(R.string.editor_add_heading)) },
                     leadingIcon = { Icon(Icons.Outlined.Title, contentDescription = null) },
+                )
+                AssistChip(
+                    onClick = onAddImage,
+                    label = { Text(stringResource(R.string.editor_add_image)) },
+                    leadingIcon = { Icon(Icons.Outlined.AddPhotoAlternate, contentDescription = null) },
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -322,3 +476,82 @@ private fun SaveIndicator(status: SaveStatus, modifier: Modifier = Modifier) {
         )
     }
 }
+
+@Composable
+private fun ImageToolbar(
+    image: ImageState,
+    onAlign: (TextAlignment) -> Unit,
+    onWidth: (Int) -> Unit,
+    onMove: (Int) -> Unit,
+    onDelete: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Surface(tonalElevation = 2.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onDone) {
+                Icon(Icons.Outlined.Done, contentDescription = stringResource(R.string.editor_image_done))
+            }
+            AlignButton(Icons.AutoMirrored.Outlined.FormatAlignLeft, R.string.editor_align_start, image.align == TextAlignment.START) {
+                onAlign(TextAlignment.START)
+            }
+            AlignButton(Icons.Outlined.FormatAlignCenter, R.string.editor_align_center, image.align == TextAlignment.CENTER) {
+                onAlign(TextAlignment.CENTER)
+            }
+            AlignButton(Icons.AutoMirrored.Outlined.FormatAlignRight, R.string.editor_align_end, image.align == TextAlignment.END) {
+                onAlign(TextAlignment.END)
+            }
+            WIDTH_PRESETS.forEach { percent ->
+                FilterChip(
+                    selected = image.widthPercent == percent,
+                    onClick = { onWidth(percent) },
+                    label = { Text(stringResource(R.string.editor_image_width, percent)) },
+                )
+            }
+            IconButton(onClick = { onMove(-1) }) {
+                Icon(Icons.Outlined.ArrowUpward, contentDescription = stringResource(R.string.action_move_up))
+            }
+            IconButton(onClick = { onMove(1) }) {
+                Icon(Icons.Outlined.ArrowDownward, contentDescription = stringResource(R.string.action_move_down))
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.editor_delete_block))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlignButton(
+    icon: ImageVector,
+    label: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    IconToggleButton(checked = selected, onCheckedChange = { onClick() }) {
+        Icon(icon, contentDescription = stringResource(label))
+    }
+}
+
+/** Maps a drop point (relative to the list's top) to the block index the images should be inserted at. */
+private fun dropIndex(listState: LazyListState, viewModel: EditorViewModel, y: Float): Int {
+    val hit = listState.layoutInfo.visibleItemsInfo.lastOrNull { it.offset <= y }
+        ?: return 0
+    return when (hit.key) {
+        "title" -> 0
+        "tail" -> viewModel.blocks.size
+        else -> {
+            val index = viewModel.blocks.indexOfFirst { it.id == hit.key }
+            if (index < 0) viewModel.blocks.size else index + if (y > hit.offset + hit.size / 2) 1 else 0
+        }
+    }
+}
+
+private const val MAX_PICKED_IMAGES = 10
+private val WIDTH_PRESETS = listOf(25, 50, 75, 100)
