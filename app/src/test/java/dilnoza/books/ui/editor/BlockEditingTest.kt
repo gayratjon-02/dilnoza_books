@@ -253,4 +253,44 @@ class BlockEditingTest {
         assertEquals(BlockEdit.Structure(focusId = "b"), a.type("---", 3))
         assertEquals(2, blocks.size)
     }
+
+    @Test
+    fun `a command typed into an empty block converts it`() {
+        val a = block("a", BlockKind.PARAGRAPH, "/h")
+
+        assertEquals(BlockEdit.Structure(focusId = "a"), editing.insert(a, 0, 2, BlockKind.HEADING, 2))
+        assertEquals(listOf(BlockKind.HEADING to ""), texts)
+        assertEquals(2, a.headingLevel)
+    }
+
+    @Test
+    fun `a command typed after text adds the block below and keeps the text`() {
+        val a = block("a", BlockKind.PARAGRAPH, "Matn /ro")
+
+        val edit = editing.insert(a, 5, 8, BlockKind.NUMBERED)
+
+        assertEquals(listOf(BlockKind.PARAGRAPH to "Matn ", BlockKind.NUMBERED to ""), texts)
+        assertEquals(BlockEdit.Structure(focusId = blocks[1].id), edit)
+    }
+
+    @Test
+    fun `a table command makes a table with a header and continues in a paragraph`() {
+        val a = block("a", BlockKind.PARAGRAPH, "/jad")
+
+        val edit = editing.insert(a, 0, 4, BlockKind.TABLE)
+
+        assertEquals(listOf(BlockKind.TABLE to "", BlockKind.PARAGRAPH to ""), texts)
+        assertTrue(a.table!!.headerRow)
+        assertEquals(3, a.table!!.grid.rowCount)
+        assertEquals(BlockEdit.Structure(focusId = blocks[1].id), edit)
+    }
+
+    @Test
+    fun `a page break after text goes below it`() {
+        val a = block("a", BlockKind.PARAGRAPH, "Matn /p")
+        block("b", BlockKind.PARAGRAPH)
+
+        assertEquals(BlockEdit.Structure(focusId = "b"), editing.insert(a, 5, 7, BlockKind.PAGE_BREAK))
+        assertEquals(listOf(BlockKind.PARAGRAPH to "Matn ", BlockKind.PAGE_BREAK to "", BlockKind.PARAGRAPH to ""), texts)
+    }
 }

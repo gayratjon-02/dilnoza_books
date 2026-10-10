@@ -10,6 +10,7 @@ import dilnoza.books.editor.commands.ShortcutTarget
 import dilnoza.books.editor.richtext.RichTextEditor
 import dilnoza.books.editor.richtext.plus
 import dilnoza.books.editor.richtext.subText
+import dilnoza.books.editor.table.TableGrid
 
 /** What an edit did to the chapter, so the caller knows what to save and where the caret goes. */
 sealed interface BlockEdit {
@@ -52,6 +53,36 @@ class BlockEditing(
         } else {
             splitLines(block, edited, breaks, cursor)
         }
+    }
+
+    /**
+     * Replaces [start]..[end] of [block] (the "/" command typed into it) with a block of [kind]. An
+     * emptied block becomes the new kind itself; otherwise the new block goes right after it. After a
+     * non-text block the caret moves to the text that follows it.
+     */
+    fun insert(block: EditorBlock, start: Int, end: Int, kind: BlockKind, headingLevel: Int = block.headingLevel): BlockEdit {
+        val length = block.rich.text.length
+        val rest = block.rich.subText(0, start) + block.rich.subText(end, length)
+        block.setRich(rest, TextRange(start.coerceIn(0, rest.text.length)))
+        val index = blocks.indexOf(block)
+        if (kind.isText) {
+            if (rest.text.isEmpty()) {
+                convert(block, kind, headingLevel)
+                return BlockEdit.Structure(focusId = block.id)
+            }
+            val created = newBlock(kind, RichText.Empty).also { it.headingLevel = headingLevel }
+            blocks.add(index + 1, created)
+            return BlockEdit.Structure(focusId = created.id)
+        }
+        val target = if (rest.text.isEmpty()) {
+            block.also { it.kind = kind }
+        } else {
+            newBlock(kind, RichText.Empty).also { blocks.add(index + 1, it) }
+        }
+        if (kind == BlockKind.TABLE) {
+            target.table = TableState(TableGrid.create(NEW_TABLE_SIZE, NEW_TABLE_SIZE) { _, _ -> RichText.Empty }, headerRow = true)
+        }
+        return BlockEdit.Structure(focusId = textBlockAfter(target).id)
     }
 
     /** Turns a text block into another text kind; headings cannot hold line breaks. */
@@ -186,6 +217,7 @@ class BlockEditing(
         }
 
     companion object {
+        private const val NEW_TABLE_SIZE = 3
         private val LISTS = setOf(BlockKind.BULLET, BlockKind.NUMBERED)
         private val EXITABLE = LISTS + BlockKind.QUOTE
 

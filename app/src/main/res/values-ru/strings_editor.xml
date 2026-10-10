@@ -30,4 +30,5 @@
     </plurals>
     <string name="block_bulleted_list">Маркированный список</string>
     <string name="block_numbered_list">Нумерованный список</string>
+    <string name="slash_menu">Вставить блок</string>
 </resources>

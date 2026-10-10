@@ -29,4 +29,5 @@
     </plurals>
     <string name="block_bulleted_list">Bulleted list</string>
     <string name="block_numbered_list">Numbered list</string>
+    <string name="slash_menu">Insert block</string>
 </resources>

@@ -72,6 +72,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -103,9 +104,11 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -123,6 +126,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dilnoza.books.R
 import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.editor.autosave.SaveStatus
+import dilnoza.books.editor.commands.SlashCommands
+import dilnoza.books.editor.commands.SlashQuery
 import dilnoza.books.editor.richtext.StyleAttribute
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -138,6 +143,7 @@ fun EditorScreen(
     val focusManager = LocalFocusManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     var listTopInRoot by remember { mutableFloatStateOf(0f) }
+    var listBottomInRoot by remember { mutableFloatStateOf(0f) }
     var dropHovering by remember { mutableStateOf(false) }
 
     val pickImages = rememberLauncherForActivityResult(
@@ -249,7 +255,10 @@ fun EditorScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .onGloballyPositioned { listTopInRoot = it.positionInRoot().y }
+                        .onGloballyPositioned {
+                            listTopInRoot = it.positionInRoot().y
+                            listBottomInRoot = listTopInRoot + it.size.height
+                        }
                         .dragAndDropTarget(
                             shouldStartDragAndDrop = { event ->
                                 event.mimeTypes().any { ClipDescription.compareMimeTypes(it, "image/*") }
@@ -296,6 +305,17 @@ fun EditorScreen(
                                 onFocused = { viewModel.onBlockFocused(block.id) },
                                 onFormat = viewModel::format,
                                 onIndent = viewModel::indentFocused,
+                                slashQuery = viewModel.slashQuery?.takeIf { selected },
+                                visibleTop = listTopInRoot,
+                                visibleBottom = listBottomInRoot,
+                                onSlashCommand = { command ->
+                                    if (viewModel.runSlashCommand(command)) {
+                                        pickImages.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                        )
+                                    }
+                                },
+                                onSlashDismiss = viewModel::dismissSlashMenu,
                                 onImagesPasted = { uris ->
                                     viewModel.insertImages(resolver.openImageSources(uris))
                                 },
@@ -396,6 +416,11 @@ private fun BlockField(
     onFocused: () -> Unit,
     onFormat: (FormatChange) -> Unit,
     onIndent: (Int) -> Unit,
+    slashQuery: SlashQuery?,
+    visibleTop: Float,
+    visibleBottom: Float,
+    onSlashCommand: (SlashCommand) -> Unit,
+    onSlashDismiss: () -> Unit,
     onImagesPasted: (List<Uri>) -> Unit,
 ) {
     val kind = block.kind
@@ -415,6 +440,15 @@ private fun BlockField(
     val darkTheme = isDarkPage()
     val transformation = remember(rich, darkTheme) { RichTextTransformation(rich, darkTheme, hiddenPrefix = 1) }
     val fieldValue = remember(block.value) { block.value.toFieldValue() }
+    val labels = SlashCommand.entries.associateWith { it.label() }
+    val commands = remember(slashQuery?.filter, labels) {
+        slashQuery?.let { query -> SlashCommands.filter(SlashCommand.entries, query.filter) { listOf(labels.getValue(it)) + it.keywords } }
+            .orEmpty()
+    }
+    var highlighted by remember(commands) { mutableIntStateOf(0) }
+    val menuOpen = commands.isNotEmpty()
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var fieldTop by remember { mutableFloatStateOf(0f) }
     val quoteColor = MaterialTheme.colorScheme.primary
     val hint = when (kind) {
         BlockKind.HEADING -> R.string.editor_heading_hint
@@ -453,11 +487,20 @@ private fun BlockField(
             value = fieldValue,
             onValueChange = { field ->
                 when (val edit = fieldEdit(block.value, field)) {
-                    is FieldEdit.Change -> onValueChange(edit.value)
+                    is FieldEdit.Change -> if (
+                        menuOpen &&
+                        BlockEditing.insertedLineBreaks(block.value.text, edit.value.text, edit.value.selection.end).isNotEmpty()
+                    ) {
+                        // Enter on the soft keyboard picks the highlighted command.
+                        onSlashCommand(commands[highlighted])
+                    } else {
+                        onValueChange(edit.value)
+                    }
                     FieldEdit.BackspaceAtStart -> onBackspaceAtStart()
                 }
             },
             textStyle = style,
+            onTextLayout = { layout = it },
             visualTransformation = transformation,
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -466,6 +509,18 @@ private fun BlockField(
                 .focusRequester(block.focusRequester)
                 .onFocusChanged { if (it.isFocused) onFocused() }
                 .onPreviewKeyEvent { event ->
+                    if (menuOpen) {
+                        val handled = event.key in MENU_KEYS
+                        if (handled && event.type == KeyEventType.KeyDown) {
+                            when (event.key) {
+                                Key.DirectionDown -> highlighted = (highlighted + 1) % commands.size
+                                Key.DirectionUp -> highlighted = (highlighted - 1 + commands.size) % commands.size
+                                Key.Escape -> onSlashDismiss()
+                                else -> onSlashCommand(commands[highlighted])
+                            }
+                        }
+                        if (handled) return@onPreviewKeyEvent true
+                    }
                     val value = block.value
                     if (event.key == Key.Delete && value.selection == TextRange(value.text.length) && event.isPlain()) {
                         if (event.type == KeyEventType.KeyDown) onDeleteAtEnd()
@@ -491,9 +546,36 @@ private fun BlockField(
                 },
             decorationBox = { inner ->
                 // The inner field only fills the width (and so honours text alignment) under a min width.
-                Box(Modifier.fillMaxWidth(), propagateMinConstraints = true) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { fieldTop = it.positionInRoot().y },
+                    propagateMinConstraints = true,
+                ) {
                     if (block.value.text.isEmpty()) Placeholder(stringResource(hint), style)
                     inner()
+                    val textLayout = layout
+                    if (menuOpen && slashQuery != null && textLayout != null) {
+                        val density = LocalDensity.current
+                        val offset = slashQuery.slashIndex.coerceIn(0, textLayout.layoutInput.text.length)
+                        val gap = with(density) { MENU_GAP.toPx() }
+                        val caret = textLayout.getCursorRect(offset).let { it.copy(top = it.top - gap, bottom = it.bottom + gap) }
+                        val spaceBelow = visibleBottom - (fieldTop + caret.bottom)
+                        val spaceAbove = fieldTop + caret.top - visibleTop
+                        val wanted = with(density) { minOf(MENU_MAX_HEIGHT, MENU_ITEM_HEIGHT * commands.size + 12.dp).toPx() }
+                        val below = spaceBelow >= wanted || spaceBelow >= spaceAbove
+                        SlashMenuPopup(
+                            commands = commands,
+                            labels = labels,
+                            highlighted = highlighted.coerceIn(commands.indices),
+                            caret = caret,
+                            below = below,
+                            maxHeight = with(density) { (if (below) spaceBelow else spaceAbove).toDp() }
+                                .coerceIn(MENU_ITEM_HEIGHT * 2, MENU_MAX_HEIGHT),
+                            onSelect = onSlashCommand,
+                            onDismiss = onSlashDismiss,
+                        )
+                    }
                 }
             },
         )
@@ -711,6 +793,9 @@ private fun dropIndex(listState: LazyListState, viewModel: EditorViewModel, y: F
 
 private const val MAX_PICKED_IMAGES = 10
 private const val MAX_FOCUS_FRAMES = 6
+private val MENU_GAP = 4.dp
+private val MENU_ITEM_HEIGHT = 48.dp
+private val MENU_KEYS = setOf(Key.DirectionDown, Key.DirectionUp, Key.Enter, Key.NumPadEnter, Key.Escape)
 private val LIST_INDENT = 24.dp
 private const val LINE_HEIGHT_FACTOR = 1.4f
 private val LIST_MARKER_WIDTH = 28.dp

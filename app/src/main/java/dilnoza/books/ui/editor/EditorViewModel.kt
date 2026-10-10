@@ -27,6 +27,10 @@ import dilnoza.books.editor.autosave.SaveStatus
 import dilnoza.books.editor.commands.ListItem
 import dilnoza.books.editor.commands.ListKind
 import dilnoza.books.editor.commands.ListNumbering
+import dilnoza.books.editor.commands.SlashCommands
+import dilnoza.books.editor.commands.SlashQuery
+import dilnoza.books.editor.richtext.plus
+import dilnoza.books.editor.richtext.subText
 import dilnoza.books.ui.navigation.EditorRoute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +72,8 @@ class EditorViewModel @Inject constructor(
         private set
     private var bookId: String? = null
     private var focusedBlockId by mutableStateOf<String?>(null)
+    // Where the writer typed "/" to open the command menu; the menu stays while that query is active.
+    private var slashAnchor by mutableStateOf<Pair<String, Int>?>(null)
     // Style chosen with a collapsed caret, given to the next typed characters until the caret moves.
     private var typingStyle by mutableStateOf<SpanStyleData?>(null)
 
@@ -88,6 +94,15 @@ class EditorViewModel @Inject constructor(
         blocks.zip(ListNumbering.labels(items)) { block, label -> block.id to label }.toMap()
     }
     val focusedBlock: EditorBlock? get() = blocks.firstOrNull { it.id == focusedBlockId }
+    /** The open "/" command query in the focused block, or null when the menu is closed. */
+    val slashQuery: SlashQuery?
+        get() {
+            val (blockId, slashIndex) = slashAnchor ?: return null
+            val block = focusedTextBlock()?.takeIf { it.id == blockId } ?: return null
+            val selection = block.value.selection
+            if (!selection.collapsed) return null
+            return SlashCommands.query(block.value.text, selection.end)?.takeIf { it.slashIndex == slashIndex }
+        }
     /** Format bar state, or null when no text block is focused. */
     val formatState: FormatState? get() = focusedTextBlock()?.formatState(typingStyle)
 
@@ -137,15 +152,48 @@ class EditorViewModel @Inject constructor(
     }
 
     fun onBlockChange(block: EditorBlock, value: TextFieldValue) {
-        val textChanged = value.text != block.value.text
+        val old = block.value.text
+        val textChanged = value.text != old
         if (!textChanged || !block.kind.isText) {
             val caretMoved = !textChanged && value.selection != block.value.selection
             block.setValue(value, typingStyle)
             if (textChanged) markDirty(block.id)
             if (caretMoved) typingStyle = null
-            return
+        } else {
+            apply(editing.type(block, value, typingStyle))
         }
-        apply(editing.type(block, value, typingStyle))
+        updateSlashAnchor(block, typedSlash = textChanged && value.text.length > old.length)
+    }
+
+    /** Runs a "/" menu command; returns true when the caller should let the writer pick pictures. */
+    fun runSlashCommand(command: SlashCommand): Boolean {
+        val block = focusedTextBlock() ?: return false
+        val query = slashQuery ?: return false
+        slashAnchor = null
+        val end = query.slashIndex + 1 + query.filter.length
+        if (command.kind == BlockKind.IMAGE) {
+            val text = block.rich
+            block.setRich(text.subText(0, query.slashIndex) + text.subText(end, text.text.length), TextRange(query.slashIndex))
+            markDirty(block.id)
+            return true
+        }
+        apply(editing.insert(block, query.slashIndex, end, command.kind, command.headingLevel))
+        return false
+    }
+
+    fun dismissSlashMenu() {
+        slashAnchor = null
+    }
+
+    private fun updateSlashAnchor(block: EditorBlock, typedSlash: Boolean) {
+        val selection = block.value.selection
+        val query = if (block.kind.isText && selection.collapsed) SlashCommands.query(block.value.text, selection.end) else null
+        slashAnchor = when {
+            query == null -> null
+            typedSlash && query.filter.isEmpty() -> block.id to query.slashIndex
+            slashAnchor == (block.id to query.slashIndex) -> slashAnchor
+            else -> null
+        }
     }
 
     fun onBackspaceAtStart(block: EditorBlock) {
@@ -247,9 +295,14 @@ class EditorViewModel @Inject constructor(
 
     fun imageFile(fileName: String): File? = bookId?.let { imageStore.imageFile(it, fileName) }
 
-    /** Index right after the focused block, or the end of the chapter when nothing is focused. */
-    fun insertionIndex(): Int =
-        blocks.indexOfFirst { it.id == focusedBlockId }.takeIf { it >= 0 }?.plus(1) ?: blocks.size
+    /** Where new pictures go: after the focused block (at it, on an empty line), or at the end. */
+    fun insertionIndex(): Int {
+        val index = blocks.indexOfFirst { it.id == focusedBlockId }
+        if (index < 0) return blocks.size
+        val focused = blocks[index]
+        // On an empty line the picture goes above it, and writing continues right below the picture.
+        return if (focused.kind.isText && focused.value.text.isEmpty()) index else index + 1
+    }
 
     /**
      * Inserts placeholders immediately and imports the pictures in the background.
