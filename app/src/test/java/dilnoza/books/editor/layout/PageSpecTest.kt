@@ -64,6 +64,15 @@ class PageSpecTest {
     }
 
     @Test
+    fun `table columns split the text column into whole points`() {
+        assertEquals(102, PageStyles.tableColumnWidthPt(306, 3))
+        assertEquals(94, PageStyles.tableCellTextWidthPt(102))
+        assertEquals(43, PageStyles.tableColumnWidthPt(306, 7))
+        assertEquals(35, PageStyles.tableCellTextWidthPt(43))
+        assertEquals(1, PageStyles.tableCellTextWidthPt(PageStyles.tableColumnWidthPt(5, 8)))
+    }
+
+    @Test
     fun `margins are clamped to a usable range`() {
         assertEquals(PageSpec.mmToPt(10f), PageSpec.of(PageSize.A5, marginMm = 0).marginPt, delta)
         assertEquals(PageSpec.mmToPt(35f), PageSpec.of(PageSize.A5, marginMm = 200).marginPt, delta)

@@ -89,8 +89,8 @@ fun TableBlockView(
         modifier = Modifier.fillMaxWidth(),
     ) {
         val density = LocalDensity.current
-        // Columns share the page width equally, exactly as the paginator measures them.
-        val columnWidth = with(density) { (constraints.maxWidth / table.columnKeys.size).toDp() }
+        // Columns share the page width equally in whole points, exactly as the paginator measures them.
+        val columnWidth = with(density) { PageStyles.tableColumnWidthPt(constraints.maxWidth, table.columnKeys.size).toDp() }
         Column(
             modifier = Modifier
                 .horizontalScroll(rememberScrollState())

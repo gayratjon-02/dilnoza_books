@@ -9,7 +9,6 @@ import androidx.compose.ui.unit.Density
 import dilnoza.books.domain.model.Block
 import dilnoza.books.domain.model.BlockContent
 import dilnoza.books.domain.model.RichText
-import kotlin.math.ceil
 import kotlin.math.max
 
 /**
@@ -78,7 +77,7 @@ class PageMeasurer(
     /** Columns share the content width equally; each row is as tall as its tallest cell. */
     fun tableHeight(table: BlockContent.Table): Float {
         val columns = max(1, table.rows.maxOfOrNull { it.size } ?: 1)
-        val cellWidth = ceil(spec.contentWidthPt / columns - 2 * PageStyles.TABLE_CELL_PADDING_PT).toInt()
+        val cellWidth = PageStyles.tableCellTextWidthPt(PageStyles.tableColumnWidthPt(column, columns))
         return table.rows.withIndex().sumOf { (index, row) ->
             val style = PageStyles.tableCell(header = table.headerRow && index == 0)
             val tallest = row.maxOfOrNull { layout(styled(it), style, cellWidth).size.height } ?: 0

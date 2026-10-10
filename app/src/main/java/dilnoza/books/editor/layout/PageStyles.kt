@@ -31,6 +31,13 @@ object PageStyles {
     const val BLOCK_GAP_PT = 8f
     const val LIST_ITEM_GAP_PT = 2f
 
+    /** Width of each of [columns] equal table columns in a [columnWidthPt] text column, in whole points. */
+    fun tableColumnWidthPt(columnWidthPt: Int, columns: Int): Int = (columnWidthPt / columns.coerceAtLeast(1)).coerceAtLeast(1)
+
+    /** Width left for a cell's text inside a [tableColumnWidthPt] wide column. */
+    fun tableCellTextWidthPt(tableColumnWidthPt: Int): Int =
+        (tableColumnWidthPt - 2 * TABLE_CELL_PADDING_PT.toInt()).coerceAtLeast(1)
+
     /** Width of a picture shown at [percent] of a [columnWidthPt] column, in whole points. */
     fun imageWidthPt(columnWidthPt: Int, percent: Int): Int = (columnWidthPt * percent / 100).coerceAtLeast(1)
 

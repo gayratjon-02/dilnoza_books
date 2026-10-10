@@ -4,24 +4,26 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFontFamilyResolver
-import androidx.compose.ui.text.font.createFontFamilyResolver
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import dilnoza.books.domain.model.BlockContent
 import dilnoza.books.domain.model.PageSize
 import dilnoza.books.domain.model.RichText
@@ -31,8 +33,13 @@ import dilnoza.books.editor.layout.PagePlan
 import dilnoza.books.editor.layout.PageSpec
 import dilnoza.books.editor.layout.PageStyles
 import dilnoza.books.editor.layout.Pagination
+import dilnoza.books.ui.editor.BlockKind
+import dilnoza.books.ui.editor.EditorBlock
+import dilnoza.books.ui.editor.TableBlockView
+import dilnoza.books.ui.editor.TableState
 import dilnoza.books.ui.editor.toAnnotatedString
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,7 +47,8 @@ import kotlin.random.Random
 
 /**
  * The paginator plans every block from [PageMeasurer]; the editor then draws it in a [PageSlice]
- * column. Both must break the same text into the same lines, or text overflows its planned slot.
+ * column. Both must break the same text into the same lines and give boxes the same height, or
+ * content overflows its planned slot.
  */
 @RunWith(AndroidJUnit4::class)
 class PageLayoutMatchTest {
@@ -48,7 +56,18 @@ class PageLayoutMatchTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private val paragraphs = List(PARAGRAPHS) { index -> sentence(Random(index)) }
+    private var screen by mutableStateOf<(@Composable () -> Unit)?>(null)
+
+    @Before
+    fun setUp() {
+        rule.setContent { screen?.invoke() }
+    }
+
+    /** Shows [content] in page points, each item in its own page column like the editor's block items. */
+    private fun show(content: @Composable () -> Unit) {
+        rule.runOnIdle { screen = { PointSpace(scale = 1f) { Column(Modifier.wrapContentHeight(unbounded = true)) { content() } } } }
+        rule.waitForIdle()
+    }
 
     @Test
     fun paragraphsWrapLikeThePlanOnEveryPageSize() {
@@ -68,47 +87,68 @@ class PageLayoutMatchTest {
         }
     }
 
-    private class Case(val spec: PageSpec, val style: TextStyle, val insetPt: Int)
-
-    private var case by mutableStateOf<Case?>(null)
-    private val drawn = arrayOfNulls<TextLayoutResult>(PARAGRAPHS)
-    private var contentSet = false
-
-    private fun assertSameLines(spec: PageSpec, style: TextStyle, insetPt: Int, content: (String) -> BlockContent) {
-        drawn.fill(null)
-        if (!contentSet) {
-            contentSet = true
-            rule.setContent {
-                val current = case ?: return@setContent
-                PointSpace(scale = 1f) {
-                    Column {
-                        paragraphs.forEachIndexed { index, text ->
-                            Slice(current.spec) {
-                                BasicTextField(
-                                    value = TextFieldValue(text),
-                                    onValueChange = {},
-                                    textStyle = current.style,
-                                    onTextLayout = { drawn[index] = it },
-                                    modifier = Modifier.fillMaxWidth().padding(start = current.insetPt.dp),
-                                )
-                            }
+    @Test
+    fun tablesAreAsTallAsPlanned() {
+        val tables = List(TABLES) { index ->
+            val random = Random(1000 + index)
+            val columns = random.nextInt(2, 8)
+            val rows = List(random.nextInt(1, 5)) {
+                List(columns) { RichText(words(random, 1, 14)) }
+            }
+            BlockContent.Table(rows = rows, headerRow = random.nextBoolean())
+        }
+        for (spec in SPECS) {
+            val heights = IntArray(tables.size) { -1 }
+            show {
+                tables.forEachIndexed { index, table ->
+                    // A slot taller than any of the tables, so each can take its natural height.
+                    Slice(spec, heightPt = 3000f) {
+                        Box(Modifier.onSizeChanged { heights[index] = it.height }) {
+                            val state = TableState.of(table)
+                            TableBlockView(
+                                block = EditorBlock("t$index", BlockKind.TABLE, table = state),
+                                table = state,
+                                selected = false,
+                                focusedCell = null,
+                                onCellFocused = {},
+                                onCellChange = { _, _ -> },
+                                onCellNext = { _, _, _ -> },
+                            )
                         }
                     }
                 }
             }
+            val measurer = measurer(spec)
+            rule.runOnIdle {
+                val mismatches = tables.indices.mapNotNull { index ->
+                    val planned = measurer.tableHeight(tables[index]).toInt()
+                    if (planned == heights[index]) null else "#$index planned $planned drawn ${heights[index]}"
+                }
+                assertEquals("tables drawn at another height than planned (width ${spec.columnWidthPt})", emptyList<String>(), mismatches)
+            }
         }
-        rule.runOnIdle { case = Case(spec, style, insetPt) }
-        rule.waitForIdle()
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val measurer = PageMeasurer(
-            TextMeasurer(createFontFamilyResolver(context), PageMeasurer.PointDensity, LayoutDirection.Ltr),
-            spec,
-        ) { it.toAnnotatedString() }
+    }
+
+    private fun assertSameLines(spec: PageSpec, style: TextStyle, insetPt: Int, content: (String) -> BlockContent) {
+        val drawn = arrayOfNulls<TextLayoutResult>(PARAGRAPHS.size)
+        show {
+            PARAGRAPHS.forEachIndexed { index, text ->
+                Slice(spec) {
+                    BasicTextField(
+                        value = TextFieldValue(text),
+                        onValueChange = {},
+                        textStyle = style,
+                        onTextLayout = { drawn[index] = it },
+                        modifier = Modifier.fillMaxWidth().padding(start = insetPt.dp),
+                    )
+                }
+            }
+        }
+        val measurer = measurer(spec)
         rule.runOnIdle {
-            val mismatches = paragraphs.indices.mapNotNull { index ->
-                val planned = measurer.measure("b$index", content(paragraphs[index])) as FlowItem.Text
+            val mismatches = PARAGRAPHS.indices.mapNotNull { index ->
+                val planned = measurer.measure("b$index", content(PARAGRAPHS[index])) as FlowItem.Text
                 val shown = checkNotNull(drawn[index]) { "paragraph $index was not laid out" }
-                check(shown.layoutInput.style.fontSize == style.fontSize)
                 val shownStarts = (0 until shown.lineCount).map(shown::getLineStart)
                 if (shownStarts == planned.lineStarts) null else "#$index planned ${planned.lineStarts} drawn $shownStarts"
             }
@@ -116,29 +156,29 @@ class PageLayoutMatchTest {
         }
     }
 
-    @Composable
-    private fun Slice(spec: PageSpec, content: @Composable () -> Unit) {
-        val plan = PagePlan.build(spec, 18f, emptyList(), Pagination(1, emptyList()))
-        Box {
-            PageSlice(
-                plan = plan,
-                startPt = 0f,
-                endPt = 0f,
-                contentTopPt = 0f,
-                contentHeightPt = null,
-                firstPageNumber = 1,
-                colors = PageColors(Color.White, Color.Gray, Color.Black),
-                numberMeasurer = TextMeasurer(LocalFontFamilyResolver.current, PageMeasurer.PointDensity, LayoutDirection.Ltr),
-                content = content,
-            )
-        }
+    private fun measurer(spec: PageSpec): PageMeasurer {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val textMeasurer = TextMeasurer(createFontFamilyResolver(context), PageMeasurer.PointDensity, LayoutDirection.Ltr)
+        return PageMeasurer(textMeasurer, spec) { it.toAnnotatedString() }
     }
 
-    private fun sentence(random: Random): String =
-        List(random.nextInt(25, 70)) { WORDS[random.nextInt(WORDS.size)] }.joinToString(" ")
+    @Composable
+    private fun Slice(spec: PageSpec, heightPt: Float = 0f, content: @Composable () -> Unit) {
+        PageSlice(
+            plan = PagePlan.build(spec, 18f, emptyList(), Pagination(1, emptyList())),
+            startPt = 0f,
+            endPt = heightPt,
+            contentTopPt = 0f,
+            contentHeightPt = null,
+            firstPageNumber = 1,
+            colors = PageColors(Color.White, Color.Gray, Color.Black),
+            numberMeasurer = TextMeasurer(LocalFontFamilyResolver.current, PageMeasurer.PointDensity, LayoutDirection.Ltr),
+            content = content,
+        )
+    }
 
     private companion object {
-        const val PARAGRAPHS = 120
+        const val TABLES = 40
         val SPECS = listOf(
             PageSpec.of(PageSize.A5, 20),
             PageSpec.of(PageSize.A5, 15),
@@ -147,8 +187,13 @@ class PageLayoutMatchTest {
         )
         val WORDS = (
             "kitob yozish oʻzbek tili qalam varaq sahifa bob muallif hikoya qahramon shahar qishloq daryo " +
-                "tog' bahor kuz qish yoz ona ota bola maktab ustoz shogird do'st sevgi orzu umid yo'l safar " +
-                "a i va bu u biz siz ular mening sening Toshkent Samarqand Buxoro Xiva Andijon Farg'ona"
+                "togʻ bahor kuz qish yoz ona ota bola maktab ustoz shogird doʻst sevgi orzu umid yoʻl safar " +
+                "a i va bu u biz siz ular mening sening Toshkent Samarqand Buxoro Xiva Andijon Fargʻona"
             ).split(" ")
+
+        fun words(random: Random, min: Int, max: Int): String =
+            List(random.nextInt(min, max)) { WORDS[random.nextInt(WORDS.size)] }.joinToString(" ")
+
+        val PARAGRAPHS = List(120) { index -> words(Random(index), 25, 70) }
     }
 }
