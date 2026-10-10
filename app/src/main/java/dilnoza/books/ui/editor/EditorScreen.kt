@@ -210,7 +210,13 @@ fun EditorScreen(
         // scrolled up a little at a time rather than jumped to the top.
         if (target != null) {
             for (attempt in 0 until MAX_FOCUS_FRAMES) {
-                if (target.focusRequester.tryFocus()) break
+                val table = target.table
+                val requester = if (target.kind == BlockKind.TABLE && table != null) {
+                    target.cellFocusRequester(request.cell?.takeIf(table::contains) ?: table.firstCell)
+                } else {
+                    target.focusRequester
+                }
+                if (requester.tryFocus()) break
                 withFrameNanos { }
                 // +1 skips the chapter title item.
                 val item = viewModel.blocks.indexOf(target) + 1
@@ -295,7 +301,17 @@ fun EditorScreen(
                             )
                             BlockKind.DIVIDER -> DividerBlockView(selected, selectBlock)
                             BlockKind.PAGE_BREAK -> PageBreakBlockView(selected, selectBlock)
-                            BlockKind.TABLE -> block.table?.let { TableBlockView(it, selected, selectBlock) }
+                            BlockKind.TABLE -> block.table?.let { table ->
+                                TableBlockView(
+                                    block = block,
+                                    table = table,
+                                    selected = selected && viewModel.focusedCell == null,
+                                    focusedCell = viewModel.focusedCell.takeIf { selected },
+                                    onCellFocused = { viewModel.onCellFocused(block, it) },
+                                    onCellChange = { cell, text -> viewModel.onCellChange(block, cell, text) },
+                                    onCellNext = { cell, forward, enter -> viewModel.onCellNext(block, cell, forward, enter) },
+                                )
+                            }
                             else -> BlockField(
                                 block = block,
                                 listLabel = viewModel.listLabels[block.id],

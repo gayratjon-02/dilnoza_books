@@ -88,6 +88,7 @@ class BlockEditing(
         val after = textBlockAfter(target)
         if (kind == BlockKind.TABLE) {
             target.table = table
+            return BlockEdit.Structure(focusId = target.id)
         }
         return BlockEdit.Structure(focusId = after.id)
     }

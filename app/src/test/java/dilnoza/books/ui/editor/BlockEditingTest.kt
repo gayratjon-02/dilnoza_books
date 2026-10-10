@@ -275,7 +275,7 @@ class BlockEditingTest {
     }
 
     @Test
-    fun `a table command makes a table with a header, and continues in a paragraph`() {
+    fun `a table command makes a table with a header, a paragraph after it and focuses the table`() {
         val a = block("a", BlockKind.PARAGRAPH, "/jad")
 
         val edit = editing.insert(a, 0, 4, BlockKind.TABLE)
@@ -283,7 +283,7 @@ class BlockEditingTest {
         assertEquals(listOf(BlockKind.TABLE to "", BlockKind.PARAGRAPH to ""), texts)
         assertTrue(a.table!!.headerRow)
         assertEquals(3, a.table!!.grid.rowCount)
-        assertEquals(BlockEdit.Structure(focusId = blocks[1].id), edit)
+        assertEquals(BlockEdit.Structure(focusId = "a"), edit)
     }
 
     @Test

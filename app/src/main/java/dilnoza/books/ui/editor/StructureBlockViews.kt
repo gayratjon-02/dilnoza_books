@@ -2,12 +2,7 @@ package dilnoza.books.ui.editor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -27,7 +22,6 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dilnoza.books.R
 
@@ -91,40 +85,5 @@ fun PageBreakBlockView(selected: Boolean, onSelect: () -> Unit) {
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 12.dp),
         )
-    }
-}
-
-/** Read-only grid; cell editing arrives with the table tools. */
-@Composable
-fun TableBlockView(table: TableState, selected: Boolean, onSelect: () -> Unit) {
-    val grid = table.grid
-    val lineColor = MaterialTheme.colorScheme.outlineVariant
-    SelectableBlock(selected, stringResource(R.string.editor_table), onSelect) {
-        Column(modifier = Modifier.fillMaxWidth().border(1.dp, lineColor)) {
-            grid.rows.forEachIndexed { rowIndex, row ->
-                val header = table.headerRow && rowIndex == 0
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min)
-                        .then(if (header) Modifier.background(MaterialTheme.colorScheme.surfaceVariant) else Modifier),
-                    horizontalArrangement = Arrangement.Start,
-                ) {
-                    row.forEach { cell ->
-                        Text(
-                            text = cell.text,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (header) FontWeight.SemiBold else null,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .border(0.5.dp, lineColor)
-                                .padding(horizontal = 8.dp, vertical = 10.dp),
-                        )
-                    }
-                }
-            }
-        }
     }
 }

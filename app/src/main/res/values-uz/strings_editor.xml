@@ -29,4 +29,5 @@
     <string name="block_bulleted_list">Belgili roʻyxat</string>
     <string name="block_numbered_list">Raqamli roʻyxat</string>
     <string name="slash_menu">Blok qoʻshish</string>
+    <string name="table_cell">%1$d-qator, %2$d-ustun</string>
 </resources>

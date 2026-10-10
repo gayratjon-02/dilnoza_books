@@ -74,6 +74,10 @@ class EditorBlock(
     var image by mutableStateOf(image)
     var table by mutableStateOf(table)
     val focusRequester = FocusRequester()
+    // One per table cell, made on first use so a focus request can name a cell before it is composed.
+    private val cellFocusRequesters = mutableMapOf<CellKey, FocusRequester>()
+
+    fun cellFocusRequester(cell: CellKey): FocusRequester = cellFocusRequesters.getOrPut(cell) { FocusRequester() }
 
     val isPendingImage: Boolean get() = kind == BlockKind.IMAGE && image?.fileName == null
 

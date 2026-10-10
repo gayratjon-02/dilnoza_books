@@ -30,4 +30,5 @@
     <string name="block_bulleted_list">Bulleted list</string>
     <string name="block_numbered_list">Numbered list</string>
     <string name="slash_menu">Insert block</string>
+    <string name="table_cell">Row %1$d, column %2$d</string>
 </resources>

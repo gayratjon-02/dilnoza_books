@@ -41,7 +41,8 @@ import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 
-data class FocusRequest(val blockId: String, val token: Long = System.nanoTime())
+/** Moves the caret to a block, or to [cell] of a table block (its first cell when null). */
+data class FocusRequest(val blockId: String, val cell: CellKey? = null, val token: Long = System.nanoTime())
 
 enum class EditorMessage { IMAGE_FAILED }
 
@@ -72,6 +73,9 @@ class EditorViewModel @Inject constructor(
         private set
     private var bookId: String? = null
     private var focusedBlockId by mutableStateOf<String?>(null)
+    /** The table cell holding the caret; only meaningful while its table is the focused block. */
+    var focusedCell by mutableStateOf<CellKey?>(null)
+        private set
     // Where the writer typed "/" to open the command menu; the menu stays while that query is active.
     private var slashAnchor by mutableStateOf<Pair<String, Int>?>(null)
     // Style chosen with a collapsed caret, given to the next typed characters until the caret moves.
@@ -211,6 +215,56 @@ class EditorViewModel @Inject constructor(
     fun onBlockFocused(id: String) {
         if (id != focusedBlockId) typingStyle = null
         focusedBlockId = id
+        focusedCell = null
+    }
+
+    fun onCellFocused(block: EditorBlock, cell: CellKey) {
+        typingStyle = null
+        slashAnchor = null
+        focusedBlockId = block.id
+        focusedCell = cell
+    }
+
+    fun onCellChange(block: EditorBlock, cell: CellKey, text: RichText) {
+        val table = block.table ?: return
+        val updated = table.updateCell(cell, text)
+        if (updated == table) return
+        block.table = updated
+        markDirty(block.id)
+    }
+
+    /**
+     * Enter or Tab in a cell: the caret moves to the next cell ([forward]) or the previous one. Past the
+     * last cell, Tab adds a row and Enter ([enter]) continues writing below the table.
+     */
+    fun onCellNext(block: EditorBlock, cell: CellKey, forward: Boolean, enter: Boolean) {
+        val table = block.table ?: return
+        val next = table.neighbour(cell, forward)
+        when {
+            next != null -> focusRequest = FocusRequest(block.id, next)
+            !forward -> Unit
+            enter -> leaveTable(block)
+            else -> {
+                val (updated, first) = table.appendRow()
+                block.table = updated
+                markDirty(block.id)
+                focusRequest = FocusRequest(block.id, first)
+            }
+        }
+    }
+
+    private fun leaveTable(block: EditorBlock) {
+        val index = blocks.indexOf(block)
+        val next = blocks.getOrNull(index + 1)
+        if (next != null && next.kind.isText) {
+            next.setSelection(TextRange(0))
+            focusRequest = FocusRequest(next.id)
+            return
+        }
+        val paragraph = newBlock(BlockKind.PARAGRAPH)
+        blocks.add(index + 1, paragraph)
+        focusRequest = FocusRequest(paragraph.id)
+        markStructureDirty()
     }
 
     fun format(change: FormatChange) {
@@ -340,6 +394,7 @@ class EditorViewModel @Inject constructor(
     fun selectBlock(id: String) {
         typingStyle = null
         focusedBlockId = id
+        focusedCell = null
     }
 
     fun setImageWidth(block: EditorBlock, percent: Int) {
