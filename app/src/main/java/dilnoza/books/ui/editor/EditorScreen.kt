@@ -51,7 +51,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FormatAlignCenter
-import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
@@ -88,7 +87,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -297,6 +295,19 @@ fun EditorScreen(
                         },
                     )
                 } else {
+                    val formatState = viewModel.formatState
+                    if (focused != null && formatState != null) {
+                        FormatBar(
+                            state = formatState,
+                            kind = focused.kind,
+                            headingLevel = focused.headingLevel,
+                            align = focused.align,
+                            onFormat = viewModel::format,
+                            onAlign = viewModel::setFocusedAlign,
+                            onTextStyle = viewModel::setFocusedTextStyle,
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
                     EditorToolbar(
                         wordCount = viewModel.wordCount,
                         focusedKind = focused?.kind,
@@ -306,9 +317,6 @@ fun EditorScreen(
                             pickImages.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
-                        },
-                        onToggleKind = {
-                            viewModel.setFocusedTextStyle(if (focused?.kind == BlockKind.HEADING) null else 1)
                         },
                         onDelete = viewModel::deleteFocusedBlock,
                     )
@@ -362,7 +370,7 @@ private fun BlockField(
             baseStyle.lineHeight
         },
     )
-    val darkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val darkTheme = isDarkPage()
     val transformation = remember(rich, darkTheme) { RichTextTransformation(rich, darkTheme) }
     val quoteColor = MaterialTheme.colorScheme.primary
     val hint = when (kind) {
@@ -469,7 +477,6 @@ private fun EditorToolbar(
     onAddParagraph: () -> Unit,
     onAddHeading: () -> Unit,
     onAddImage: () -> Unit,
-    onToggleKind: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Surface(tonalElevation = 2.dp) {
@@ -486,14 +493,6 @@ private fun EditorToolbar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onToggleKind, enabled = focusedKind?.isText == true) {
-                    Icon(
-                        Icons.Outlined.TextFields,
-                        contentDescription = stringResource(
-                            if (focusedKind == BlockKind.HEADING) R.string.editor_make_paragraph else R.string.editor_make_heading,
-                        ),
-                    )
-                }
                 IconButton(onClick = onDelete, enabled = focusedKind != null) {
                     Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.editor_delete_block))
                 }
