@@ -17,11 +17,15 @@ import dilnoza.books.core.di.ApplicationScope
 import dilnoza.books.data.files.ImageStore
 import dilnoza.books.domain.model.BlockContent
 import dilnoza.books.domain.model.POSITION_STEP
+import dilnoza.books.domain.model.RichText
 import dilnoza.books.domain.model.TextAlignment
 import dilnoza.books.domain.repository.BlockRepository
 import dilnoza.books.domain.repository.ChapterRepository
 import dilnoza.books.editor.autosave.AutoSaver
 import dilnoza.books.editor.autosave.SaveStatus
+import dilnoza.books.editor.richtext.RichTextEditor
+import dilnoza.books.editor.richtext.split
+import dilnoza.books.editor.richtext.subText
 import dilnoza.books.ui.navigation.EditorRoute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -113,7 +117,7 @@ class EditorViewModel @Inject constructor(
             splitHeading(block, value)
             return
         }
-        block.value = value
+        block.setValue(value)
         if (textChanged) markDirty(block.id)
     }
 
@@ -137,7 +141,8 @@ class EditorViewModel @Inject constructor(
         val block = focusedBlock?.takeIf { it.kind != BlockKind.IMAGE } ?: return
         block.kind = if (block.kind == BlockKind.HEADING) BlockKind.PARAGRAPH else BlockKind.HEADING
         if (block.kind == BlockKind.HEADING && block.value.text.contains('\n')) {
-            block.value = block.value.copy(text = block.value.text.replace('\n', ' '))
+            // Same length, so the spans still line up.
+            block.setRich(block.rich.copy(text = block.rich.text.replace('\n', ' ')), block.value.selection)
         }
         markDirty(block.id)
     }
@@ -146,7 +151,7 @@ class EditorViewModel @Inject constructor(
         val block = focusedBlock ?: return
         val index = blocks.indexOf(block)
         if (blocks.size == 1) {
-            block.value = TextFieldValue()
+            block.setRich(RichText.Empty)
             block.kind = BlockKind.PARAGRAPH
             markDirty(block.id)
             return
@@ -157,14 +162,14 @@ class EditorViewModel @Inject constructor(
             deletedIds.add(block.id)
         }
         val neighbour = blocks[(index - 1).coerceAtLeast(0)]
-        neighbour.value = neighbour.value.copy(selection = TextRange(neighbour.value.text.length))
+        neighbour.setSelection(TextRange(neighbour.value.text.length))
         focusRequest = FocusRequest(neighbour.id)
         markStructureDirty()
     }
 
     fun focusLastBlock() {
         val last = blocks.lastOrNull() ?: return
-        last.value = last.value.copy(selection = TextRange(last.value.text.length))
+        last.setSelection(TextRange(last.value.text.length))
         focusRequest = FocusRequest(last.id)
     }
 
@@ -185,7 +190,7 @@ class EditorViewModel @Inject constructor(
             return
         }
         val placeholders = sources.map {
-            EditorBlock(UUID.randomUUID().toString(), BlockKind.IMAGE, TextFieldValue(), image = ImageState.Pending)
+            EditorBlock(UUID.randomUUID().toString(), BlockKind.IMAGE, image = ImageState.Pending)
         }
         blocks.addAll(index.coerceIn(0, blocks.size), placeholders)
         focusedBlockId = placeholders.last().id
@@ -247,17 +252,18 @@ class EditorViewModel @Inject constructor(
 
     private fun splitHeading(block: EditorBlock, value: TextFieldValue) {
         val breakAt = value.text.indexOf('\n')
-        val headingText = value.text.substring(0, breakAt)
-        val rest = value.text.substring(breakAt + 1).replace('\n', ' ')
-        block.value = TextFieldValue(headingText, TextRange(headingText.length))
-        val paragraph = newBlock(BlockKind.PARAGRAPH, rest)
+        val edited = RichTextEditor.applyTextChange(block.rich, value.text, cursor = value.selection.end)
+        val (heading, tail) = edited.split(breakAt)
+        val rest = tail.subText(1, tail.text.length)
+        block.setRich(heading)
+        val paragraph = newBlock(BlockKind.PARAGRAPH, rest.copy(text = rest.text.replace('\n', ' ')))
         blocks.add(blocks.indexOf(block) + 1, paragraph)
         focusRequest = FocusRequest(paragraph.id)
         markStructureDirty()
     }
 
-    private fun newBlock(kind: BlockKind, text: String = "") =
-        EditorBlock(UUID.randomUUID().toString(), kind, TextFieldValue(text, TextRange(0)))
+    private fun newBlock(kind: BlockKind, rich: RichText = RichText.Empty) =
+        EditorBlock(UUID.randomUUID().toString(), kind, rich, TextRange(0))
 
     private fun markDirty(id: String) {
         synchronized(lock) { dirtyIds.add(id) }
