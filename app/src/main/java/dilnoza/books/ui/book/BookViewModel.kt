@@ -7,6 +7,7 @@ import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dilnoza.books.domain.model.Book
 import dilnoza.books.domain.model.Chapter
+import dilnoza.books.domain.model.PageSize
 import dilnoza.books.domain.repository.BookRepository
 import dilnoza.books.domain.repository.ChapterRepository
 import dilnoza.books.ui.navigation.BookRoute
@@ -32,6 +33,7 @@ sealed interface BookAction {
     data class DeleteChapter(val id: String) : BookAction
     data class MoveChapter(val id: String, val offset: Int) : BookAction
     data class UpdateBook(val title: String, val author: String) : BookAction
+    data class SetPageSize(val pageSize: PageSize) : BookAction
 }
 
 sealed interface BookEvent {
@@ -67,6 +69,7 @@ class BookViewModel @Inject constructor(
                 is BookAction.DeleteChapter -> chapters.deleteChapter(action.id)
                 is BookAction.MoveChapter -> chapters.moveChapter(action.id, action.offset)
                 is BookAction.UpdateBook -> books.updateBookInfo(bookId, action.title, action.author)
+                is BookAction.SetPageSize -> books.updatePageSize(bookId, action.pageSize)
             }
         }
     }

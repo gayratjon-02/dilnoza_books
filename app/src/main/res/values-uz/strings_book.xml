@@ -8,4 +8,8 @@
     <string name="chapter_rename_title">Bob nomini oʻzgartirish</string>
     <string name="chapter_delete_title">Bob oʻchirilsinmi?</string>
     <string name="chapter_delete_body">“%1$s” va undagi barcha matn butunlay oʻchiriladi.</string>
+    <string name="book_page_size">Varaq: %1$s</string>
+    <string name="page_size_a5">A5 (kitob)</string>
+    <string name="page_size_a4">A4</string>
+    <string name="page_size_letter">Letter</string>
 </resources>

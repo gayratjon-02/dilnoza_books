@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,8 +23,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dilnoza.books.R
 import dilnoza.books.domain.model.Book
 import dilnoza.books.domain.model.Chapter
+import dilnoza.books.domain.model.PageSize
 import dilnoza.books.ui.components.ConfirmDeleteDialog
 import dilnoza.books.ui.components.EmptyState
 import dilnoza.books.ui.components.TextFieldsDialog
@@ -134,7 +139,9 @@ private fun BookContent(
                 bottom = padding.calculateBottomPadding() + 96.dp,
             ),
         ) {
-            item(key = "header") { BookHeader(book) }
+            item(key = "header") {
+                BookHeader(book = book, onPageSize = { onAction(BookAction.SetPageSize(it)) })
+            }
             if (chapters.isEmpty()) {
                 item(key = "empty") {
                     EmptyState(
@@ -204,7 +211,7 @@ private fun BookContent(
 }
 
 @Composable
-private fun BookHeader(book: Book) {
+private fun BookHeader(book: Book, onPageSize: (PageSize) -> Unit) {
     Column {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -221,6 +228,8 @@ private fun BookHeader(book: Book) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                Spacer(Modifier.height(8.dp))
+                PageSizeSelector(selected = book.pageSize, onSelect = onPageSize)
             }
         }
         HorizontalDivider()
@@ -306,4 +315,36 @@ private fun ChapterRow(
             }
         },
     )
+}
+
+@Composable
+private fun PageSizeSelector(selected: PageSize, onSelect: (PageSize) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        AssistChip(
+            onClick = { open = true },
+            label = { Text(stringResource(R.string.book_page_size, stringResource(selected.label()))) },
+            leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            PageSize.entries.forEach { size ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(size.label())) },
+                    leadingIcon = {
+                        if (size == selected) Icon(Icons.Outlined.Check, contentDescription = null)
+                    },
+                    onClick = {
+                        open = false
+                        onSelect(size)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun PageSize.label() = when (this) {
+    PageSize.A5 -> R.string.page_size_a5
+    PageSize.A4 -> R.string.page_size_a4
+    PageSize.LETTER -> R.string.page_size_letter
 }

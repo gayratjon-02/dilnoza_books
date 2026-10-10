@@ -8,4 +8,8 @@
     <string name="chapter_rename_title">Переименовать главу</string>
     <string name="chapter_delete_title">Удалить главу?</string>
     <string name="chapter_delete_body">«%1$s» и весь её текст будут удалены безвозвратно.</string>
+    <string name="book_page_size">Страница: %1$s</string>
+    <string name="page_size_a5">A5 (книга)</string>
+    <string name="page_size_a4">A4</string>
+    <string name="page_size_letter">Letter</string>
 </resources>
