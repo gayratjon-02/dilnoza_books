@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        These components live in the test APK, so they run as a separate app: the editor receives
+        pictures from them the way it would from a gallery or a file manager.
+    -->
+    <application>
+        <provider
+            android:name="dilnoza.books.testsupport.TestImageProvider"
+            android:authorities="${applicationId}.images"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <activity
+            android:name="dilnoza.books.testsupport.ImageSourceActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:theme="@style/Theme.TestImageSource" />
+    </application>
+
+</manifest>

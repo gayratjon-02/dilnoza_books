@@ -79,6 +79,18 @@ kotlin {
     }
 }
 
+// The test APK's picture provider and source activity run in their own process, where the app's
+// Kotlin runtime is not on the classpath: drop the generated null checks that would call into it.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    if (name.contains("AndroidTest")) {
+        compilerOptions.freeCompilerArgs.addAll(
+            "-Xno-param-assertions",
+            "-Xno-call-assertions",
+            "-Xno-receiver-assertions",
+        )
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
