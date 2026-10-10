@@ -40,10 +40,16 @@ class EditorPages(
 
 /**
  * Re-paginates the chapter whenever its title, blocks or page size change. Only blocks whose content
- * changed are measured again, so typing stays cheap even in long chapters.
+ * changed are measured again, so typing stays cheap even in long chapters. [captionShownFor] names the
+ * image whose caption field is shown although it may be empty (the selected one), so its line is planned.
  */
 @Composable
-fun rememberEditorPages(title: () -> String, blocks: List<EditorBlock>, spec: PageSpec): EditorPages {
+fun rememberEditorPages(
+    title: () -> String,
+    blocks: List<EditorBlock>,
+    spec: PageSpec,
+    captionShownFor: () -> String? = { null },
+): EditorPages {
     val fontResolver = LocalFontFamilyResolver.current
     val measurer = remember(spec, fontResolver) {
         val textMeasurer = TextMeasurer(fontResolver, PageMeasurer.PointDensity, LayoutDirection.Ltr, cacheSize = 32)
@@ -55,9 +61,12 @@ fun rememberEditorPages(title: () -> String, blocks: List<EditorBlock>, spec: Pa
         derivedStateOf {
             val titleText = title()
             val titleItem = cache.cached(PageMeasurer.TITLE_ID, titleText) { measurer.measureTitle(titleText) }
+            val captionShown = captionShownFor()
             val items = listOf(titleItem) + blocks.map { block ->
                 val content = block.layoutContent()
-                cache.cached(block.id, content) { measurer.measure(block.id, content) }
+                val showsCaption = block.id == captionShown && content is BlockContent.Image
+                val key: Any = if (showsCaption) ShownCaption(content) else content
+                cache.cached(block.id, key) { measurer.measure(block.id, content, showsCaption) }
             }
             cache.keys.retainAll(items.mapTo(HashSet()) { it.blockId })
             val pagination = paginator.paginate(items)
@@ -69,6 +78,8 @@ fun rememberEditorPages(title: () -> String, blocks: List<EditorBlock>, spec: Pa
     }
     return pages
 }
+
+private data class ShownCaption(val content: BlockContent)
 
 private inline fun HashMap<String, Pair<Any, FlowItem>>.cached(id: String, key: Any, measure: () -> FlowItem): FlowItem {
     get(id)?.let { (cachedKey, item) -> if (cachedKey == key) return item }

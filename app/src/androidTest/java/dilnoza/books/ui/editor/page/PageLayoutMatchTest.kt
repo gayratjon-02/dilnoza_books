@@ -39,6 +39,8 @@ import dilnoza.books.editor.layout.Pagination
 import dilnoza.books.editor.layout.Paginator
 import dilnoza.books.ui.editor.BlockKind
 import dilnoza.books.ui.editor.EditorBlock
+import dilnoza.books.ui.editor.ImageBlockView
+import dilnoza.books.ui.editor.ImageState
 import dilnoza.books.ui.editor.TableBlockView
 import dilnoza.books.ui.editor.TableState
 import dilnoza.books.ui.editor.toAnnotatedString
@@ -131,6 +133,47 @@ class PageLayoutMatchTest {
                 }
                 assertEquals("tables drawn at another height than planned (width ${spec.columnWidthPt})", emptyList<String>(), mismatches)
             }
+        }
+    }
+
+    @Test
+    fun imagesAndCaptionsAreAsTallAsPlanned() {
+        val spec = SPECS.first()
+        // (caption, selected): a selected image shows its caption field even while it is empty.
+        val cases = listOf(
+            "" to false, "" to true, " " to false, "  " to true,
+            "Rasm izohi" to false, words(Random(7), 12, 20) to true,
+        ).flatMap { (caption, selected) -> listOf(25, 60, 100).map { Triple(caption, selected, it) } }
+        val heights = IntArray(cases.size) { -1 }
+        show {
+            cases.forEachIndexed { index, (caption, selected, percent) ->
+                Slice(spec, heightPt = 1000f) {
+                    Box(Modifier.onSizeChanged { heights[index] = it.height }) {
+                        ImageBlockView(
+                            block = EditorBlock(
+                                "i$index", BlockKind.IMAGE, rich = RichText(caption),
+                                image = ImageState(fileName = "picture.png", width = 400, height = 300, widthPercent = percent),
+                            ),
+                            file = null,
+                            selected = selected,
+                            onSelect = {},
+                            onResize = {},
+                            onCaptionChange = {},
+                            onCaptionFocused = {},
+                        )
+                    }
+                }
+            }
+        }
+        val measurer = measurer(spec)
+        rule.runOnIdle {
+            val mismatches = cases.indices.mapNotNull { index ->
+                val (caption, selected, percent) = cases[index]
+                val image = BlockContent.Image("picture.png", 400, 300, caption = caption, widthPercent = percent)
+                val planned = measurer.imageHeight(image, captionShown = selected).toInt()
+                if (planned == heights[index]) null else "'$caption' selected=$selected $percent%: planned $planned drawn ${heights[index]}"
+            }
+            assertEquals("images drawn at another height than planned", emptyList<String>(), mismatches)
         }
     }
 

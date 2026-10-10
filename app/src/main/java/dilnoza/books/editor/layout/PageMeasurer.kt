@@ -29,7 +29,8 @@ class PageMeasurer(
         text(TITLE_ID, RichText(title), PageStyles.title(), column)
             .copy(spaceAfterPt = PageTypography.TITLE_SPACE_AFTER_PT, keepWithNext = true)
 
-    fun measure(id: String, content: BlockContent): FlowItem = when (content) {
+    /** [captionShown]: the editor shows an image's caption field even while it is empty (the image is selected). */
+    fun measure(id: String, content: BlockContent, captionShown: Boolean = false): FlowItem = when (content) {
         is BlockContent.Paragraph -> text(id, content.text, textStyle(content), column)
             .copy(spaceAfterPt = PageTypography.PARAGRAPH_SPACING_PT)
 
@@ -47,7 +48,7 @@ class PageMeasurer(
 
         is BlockContent.Image -> FlowItem.Box(
             blockId = id,
-            heightPt = imageHeight(content),
+            heightPt = imageHeight(content, captionShown),
             spaceBeforePt = PageStyles.BLOCK_GAP_PT,
             spaceAfterPt = PageStyles.BLOCK_GAP_PT,
         )
@@ -65,11 +66,14 @@ class PageMeasurer(
 
     private fun textStyle(content: BlockContent): TextStyle = checkNotNull(PageStyles.forContent(content))
 
-    /** Picture height at its width share of the content box, plus the caption below it. */
-    fun imageHeight(image: BlockContent.Image): Float {
+    /**
+     * Picture height at its width share of the content box, plus the caption below it. Any caption
+     * text takes its lines, even spaces only; an empty one takes a line while [captionShown].
+     */
+    fun imageHeight(image: BlockContent.Image, captionShown: Boolean = false): Float {
         val width = PageStyles.imageWidthPt(column, image.widthPercent)
         val pictureHeight = PageStyles.imageHeightPt(width, image.width, image.height).toFloat()
-        if (image.caption.isBlank()) return pictureHeight
+        if (image.caption.isEmpty() && !captionShown) return pictureHeight
         val caption = layout(AnnotatedString(image.caption), PageStyles.caption(), width)
         return pictureHeight + PageStyles.CAPTION_GAP_PT + caption.size.height
     }

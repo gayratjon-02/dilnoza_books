@@ -343,7 +343,13 @@ fun EditorScreen(
                     )
                     HorizontalDivider()
                 }
-                val pages = rememberEditorPages({ viewModel.title.text }, viewModel.blocks, viewModel.pageSpec)
+                val pages = rememberEditorPages(
+                    title = { viewModel.title.text },
+                    blocks = viewModel.blocks,
+                    spec = viewModel.pageSpec,
+                    // ImageBlockView shows the caption field of the selected image even when it is empty.
+                    captionShownFor = { viewModel.focusedBlock?.takeIf { it.kind == BlockKind.IMAGE }?.id },
+                )
                 val plan = pages.plan
                 val numberMeasurer = rememberTextMeasurer()
                 val pageColors = PageColors(

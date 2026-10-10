@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -124,6 +125,7 @@ fun ImageBlockView(
                     )
                 }
             }
+            // The paginator plans the caption's lines under the same condition (see rememberEditorPages).
             if (selected || block.value.text.isNotEmpty()) {
                 CaptionField(
                     block = block,
@@ -213,6 +215,9 @@ private fun CaptionField(
                     Text(
                         text = stringResource(R.string.editor_image_caption_hint),
                         style = style.copy(color = style.color.copy(alpha = 0.6f)),
+                        // One line, as planned for an empty caption; a narrow picture cuts the hint short.
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
