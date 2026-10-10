@@ -124,4 +124,82 @@ class BlockEditingTest {
         assertEquals(listOf(2), BlockEditing.insertedLineBreaks("a\nb", "a\n\nb", 3))
         assertTrue(BlockEditing.insertedLineBreaks("a\nb", "ab", 1).isEmpty())
     }
+
+    @Test
+    fun `backspace at the start joins a paragraph to the text before it, keeping spans`() {
+        val italic = SpanStyleData(italic = true)
+        block("a", BlockKind.HEADING, "Bob")
+        val b = block("b", BlockKind.PARAGRAPH, rich = RichText("matn", listOf(StyleSpan(0, 4, italic))))
+
+        val edit = editing.backspaceAtStart(b)
+
+        assertEquals(BlockEdit.Structure(focusId = "a", removedIds = listOf("b")), edit)
+        assertEquals(listOf(BlockKind.HEADING to "Bobmatn"), texts)
+        assertEquals(listOf(StyleSpan(3, 7, italic)), blocks[0].rich.spans)
+        assertEquals(TextRange(3), blocks[0].value.selection)
+    }
+
+    @Test
+    fun `backspace at the start of a list item outdents, then turns it into a paragraph`() {
+        block("a", BlockKind.PARAGRAPH, "x")
+        val b = block("b", BlockKind.BULLET, "item").apply { indent = 1 }
+
+        assertEquals(BlockEdit.Content("b"), editing.backspaceAtStart(b))
+        assertEquals(0, b.indent)
+        editing.backspaceAtStart(b)
+        assertEquals(listOf(BlockKind.PARAGRAPH to "x", BlockKind.PARAGRAPH to "item"), texts)
+    }
+
+    @Test
+    fun `backspace at the start of a quote or heading turns it into a paragraph`() {
+        val a = block("a", BlockKind.QUOTE, "q")
+        val b = block("b", BlockKind.HEADING, "h")
+
+        editing.backspaceAtStart(a)
+        editing.backspaceAtStart(b)
+
+        assertEquals(listOf(BlockKind.PARAGRAPH to "q", BlockKind.PARAGRAPH to "h"), texts)
+    }
+
+    @Test
+    fun `backspace in the first paragraph does nothing`() {
+        val a = block("a", BlockKind.PARAGRAPH, "x")
+
+        assertEquals(null, editing.backspaceAtStart(a))
+    }
+
+    @Test
+    fun `backspace after a divider deletes the divider`() {
+        block("d", BlockKind.DIVIDER)
+        val b = block("b", BlockKind.PARAGRAPH, "x")
+
+        assertEquals(BlockEdit.Structure(focusId = "b", removedIds = listOf("d")), editing.backspaceAtStart(b))
+        assertEquals(listOf(BlockKind.PARAGRAPH to "x"), texts)
+    }
+
+    @Test
+    fun `backspace after a picture selects it and drops an empty paragraph`() {
+        block("i", BlockKind.IMAGE)
+        val b = block("b", BlockKind.PARAGRAPH, "x")
+        val c = block("c", BlockKind.PARAGRAPH)
+        blocks.remove(b)
+
+        assertEquals(
+            BlockEdit.Structure(focusId = null, removedIds = listOf("c"), selectId = "i"),
+            editing.backspaceAtStart(c),
+        )
+        blocks.add(b)
+        assertEquals(BlockEdit.Structure(focusId = null, selectId = "i"), editing.backspaceAtStart(b))
+        assertEquals(2, blocks.size)
+    }
+
+    @Test
+    fun `delete at the end pulls the next block up`() {
+        val a = block("a", BlockKind.PARAGRAPH, "ab")
+        block("b", BlockKind.BULLET, "cd")
+
+        assertEquals(BlockEdit.Structure(focusId = "a", removedIds = listOf("b")), editing.deleteAtEnd(a))
+        assertEquals(listOf(BlockKind.PARAGRAPH to "abcd"), texts)
+        assertEquals(TextRange(2), a.value.selection)
+    }
 }

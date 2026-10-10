@@ -63,6 +63,9 @@ class EditorViewModel @Inject constructor(
         private set
     var message by mutableStateOf<EditorMessage?>(null)
         private set
+    /** Set when the keyboard focus must leave the text, e.g. to select a picture; cleared by the screen. */
+    var clearFocusRequest by mutableStateOf<Long?>(null)
+        private set
     private var bookId: String? = null
     private var focusedBlockId by mutableStateOf<String?>(null)
     // Style chosen with a collapsed caret, given to the next typed characters until the caret moves.
@@ -143,6 +146,18 @@ class EditorViewModel @Inject constructor(
             return
         }
         apply(editing.type(block, value, typingStyle))
+    }
+
+    fun onBackspaceAtStart(block: EditorBlock) {
+        editing.backspaceAtStart(block)?.let(::apply)
+    }
+
+    fun onDeleteAtEnd(block: EditorBlock) {
+        editing.deleteAtEnd(block)?.let(::apply)
+    }
+
+    fun onClearFocusHandled() {
+        clearFocusRequest = null
     }
 
     fun onBlockFocused(id: String) {
@@ -320,7 +335,10 @@ class EditorViewModel @Inject constructor(
                     focusedBlockId = it
                     focusRequest = FocusRequest(it)
                 }
-                edit.selectId?.let { selectBlock(it) }
+                edit.selectId?.let {
+                    selectBlock(it)
+                    clearFocusRequest = System.nanoTime()
+                }
                 markStructureDirty()
             }
         }

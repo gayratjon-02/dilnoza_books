@@ -46,21 +46,35 @@ private fun fontFamilyOf(name: String): FontFamily? = when (name) {
 }
 
 /**
- * Draws [rich]'s styles over the field's plain text. The text itself is never changed, so offsets
- * map one to one and the caret cannot move. If the field is a frame ahead of [rich] (the text no
- * longer matches), the text is drawn plain for that frame instead of with misplaced styles.
+ * Draws [rich]'s styles over the field's plain text and hides the first [hiddenPrefix] characters
+ * (the block field's sentinel). The rest is never changed, so the caret cannot move. If the field is a
+ * frame ahead of [rich] (the text no longer matches), the text is drawn plain for that frame instead
+ * of with misplaced styles.
  */
 class RichTextTransformation(
     private val rich: RichText,
     private val darkTheme: Boolean,
+    private val hiddenPrefix: Int = 0,
 ) : VisualTransformation {
     private val styled = rich.toAnnotatedString(darkTheme)
 
-    override fun filter(text: AnnotatedString): TransformedText =
-        TransformedText(if (text.text == rich.text) styled else text, OffsetMapping.Identity)
+    override fun filter(text: AnnotatedString): TransformedText {
+        val prefix = hiddenPrefix.coerceAtMost(text.length)
+        val visible = if (prefix == 0) text else text.subSequence(prefix, text.length)
+        val shown = if (visible.text == rich.text) styled else visible
+        if (prefix == 0) return TransformedText(shown, OffsetMapping.Identity)
+        val length = shown.length
+        return TransformedText(
+            shown,
+            object : OffsetMapping {
+                override fun originalToTransformed(offset: Int): Int = (offset - prefix).coerceIn(0, length)
+                override fun transformedToOriginal(offset: Int): Int = offset.coerceIn(0, length) + prefix
+            },
+        )
+    }
 
-    override fun equals(other: Any?): Boolean =
-        other is RichTextTransformation && other.rich == rich && other.darkTheme == darkTheme
+    override fun equals(other: Any?): Boolean = other is RichTextTransformation &&
+        other.rich == rich && other.darkTheme == darkTheme && other.hiddenPrefix == hiddenPrefix
 
-    override fun hashCode(): Int = 31 * rich.hashCode() + darkTheme.hashCode()
+    override fun hashCode(): Int = (31 * rich.hashCode() + darkTheme.hashCode()) * 31 + hiddenPrefix
 }

@@ -103,6 +103,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -183,6 +184,12 @@ fun EditorScreen(
     if (viewModel.missing) {
         LaunchedEffect(Unit) { onBack() }
         return
+    }
+
+    LaunchedEffect(viewModel.clearFocusRequest) {
+        if (viewModel.clearFocusRequest == null) return@LaunchedEffect
+        focusManager.clearFocus()
+        viewModel.onClearFocusHandled()
     }
 
     val request = viewModel.focusRequest
@@ -269,6 +276,8 @@ fun EditorScreen(
                                 block = block,
                                 listLabel = viewModel.listLabels[block.id],
                                 onValueChange = { viewModel.onBlockChange(block, it) },
+                                onBackspaceAtStart = { viewModel.onBackspaceAtStart(block) },
+                                onDeleteAtEnd = { viewModel.onDeleteAtEnd(block) },
                                 onFocused = { viewModel.onBlockFocused(block.id) },
                                 onFormat = viewModel::format,
                                 onImagesPasted = { uris ->
@@ -364,6 +373,8 @@ private fun BlockField(
     block: EditorBlock,
     listLabel: String?,
     onValueChange: (TextFieldValue) -> Unit,
+    onBackspaceAtStart: () -> Unit,
+    onDeleteAtEnd: () -> Unit,
     onFocused: () -> Unit,
     onFormat: (FormatChange) -> Unit,
     onImagesPasted: (List<Uri>) -> Unit,
@@ -383,7 +394,8 @@ private fun BlockField(
         },
     )
     val darkTheme = isDarkPage()
-    val transformation = remember(rich, darkTheme) { RichTextTransformation(rich, darkTheme) }
+    val transformation = remember(rich, darkTheme) { RichTextTransformation(rich, darkTheme, hiddenPrefix = 1) }
+    val fieldValue = remember(block.value) { block.value.toFieldValue() }
     val quoteColor = MaterialTheme.colorScheme.primary
     val hint = when (kind) {
         BlockKind.HEADING -> R.string.editor_heading_hint
@@ -419,8 +431,13 @@ private fun BlockField(
             )
         }
         BasicTextField(
-            value = block.value,
-            onValueChange = onValueChange,
+            value = fieldValue,
+            onValueChange = { field ->
+                when (val edit = fieldEdit(block.value, field)) {
+                    is FieldEdit.Change -> onValueChange(edit.value)
+                    FieldEdit.BackspaceAtStart -> onBackspaceAtStart()
+                }
+            },
             textStyle = style,
             visualTransformation = transformation,
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -430,6 +447,11 @@ private fun BlockField(
                 .focusRequester(block.focusRequester)
                 .onFocusChanged { if (it.isFocused) onFocused() }
                 .onPreviewKeyEvent { event ->
+                    val value = block.value
+                    if (event.key == Key.Delete && value.selection == TextRange(value.text.length) && event.isPlain()) {
+                        if (event.type == KeyEventType.KeyDown) onDeleteAtEnd()
+                        return@onPreviewKeyEvent true
+                    }
                     val change = event.formatShortcut() ?: return@onPreviewKeyEvent false
                     if (event.type == KeyEventType.KeyDown) onFormat(change)
                     true
@@ -452,6 +474,8 @@ private fun BlockField(
         )
     }
 }
+
+private fun KeyEvent.isPlain(): Boolean = !isCtrlPressed && !isAltPressed && !isShiftPressed
 
 /** Word-processor shortcuts on a hardware keyboard: Ctrl+B, I, U, Ctrl+Shift+X and Ctrl+Backslash. */
 private fun KeyEvent.formatShortcut(): FormatChange? {

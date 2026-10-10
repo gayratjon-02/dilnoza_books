@@ -110,4 +110,17 @@ class RichTextAnnotationsTest {
 
         assertEquals(RichTextTransformation(rich, false), RichTextTransformation(rich.copy(), false))
     }
+
+    @Test
+    fun `transformation hides the sentinel and maps offsets around it`() {
+        val rich = RichText("ab", listOf(StyleSpan(0, 1, SpanStyleData(bold = true))))
+        val transformed = RichTextTransformation(rich, darkTheme = false, hiddenPrefix = 1).filter(AnnotatedString("\nab"))
+
+        assertEquals("ab", transformed.text.text)
+        assertEquals(1, transformed.text.spanStyles.size)
+        assertEquals(0, transformed.offsetMapping.originalToTransformed(0))
+        assertEquals(2, transformed.offsetMapping.originalToTransformed(3))
+        assertEquals(1, transformed.offsetMapping.transformedToOriginal(0))
+        assertEquals(3, transformed.offsetMapping.transformedToOriginal(2))
+    }
 }

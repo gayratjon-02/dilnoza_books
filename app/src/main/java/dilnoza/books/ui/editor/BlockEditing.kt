@@ -5,6 +5,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import dilnoza.books.domain.model.RichText
 import dilnoza.books.domain.model.SpanStyleData
 import dilnoza.books.editor.richtext.RichTextEditor
+import dilnoza.books.editor.richtext.plus
 import dilnoza.books.editor.richtext.subText
 
 /** What an edit did to the chapter, so the caller knows what to save and where the caret goes. */
@@ -72,6 +73,52 @@ class BlockEditing(
         val offset = if (segment == 0) cursor else cursor - breaks[segment - 1] - 1
         target.setSelection(TextRange(offset.coerceIn(0, target.value.text.length)))
         return BlockEdit.Structure(focusId = target.id)
+    }
+
+    /**
+     * Backspace with the caret at the start of [block]. A list item, quote or heading first becomes a
+     * paragraph; a paragraph joins the text block before it. A divider or page break before it is
+     * deleted, and a picture or table is selected, so it is never removed by a stray keypress.
+     */
+    fun backspaceAtStart(block: EditorBlock): BlockEdit? {
+        if (block.kind != BlockKind.PARAGRAPH) return exit(block)
+        val index = blocks.indexOf(block)
+        val previous = blocks.getOrNull(index - 1) ?: return null
+        return when {
+            previous.kind.isText -> join(previous, block)
+            previous.kind == BlockKind.DIVIDER || previous.kind == BlockKind.PAGE_BREAK -> {
+                blocks.removeAt(index - 1)
+                block.setSelection(TextRange(0))
+                BlockEdit.Structure(focusId = block.id, removedIds = listOf(previous.id))
+            }
+            block.value.text.isEmpty() -> {
+                blocks.removeAt(index)
+                BlockEdit.Structure(focusId = null, removedIds = listOf(block.id), selectId = previous.id)
+            }
+            else -> BlockEdit.Structure(focusId = null, selectId = previous.id)
+        }
+    }
+
+    /** Forward delete with the caret at the end of [block]: pulls the next block's text up into it. */
+    fun deleteAtEnd(block: EditorBlock): BlockEdit? {
+        val index = blocks.indexOf(block)
+        val next = blocks.getOrNull(index + 1) ?: return null
+        return when {
+            next.kind.isText -> join(block, next)
+            next.kind == BlockKind.DIVIDER || next.kind == BlockKind.PAGE_BREAK -> {
+                blocks.removeAt(index + 1)
+                BlockEdit.Structure(focusId = block.id, removedIds = listOf(next.id))
+            }
+            else -> BlockEdit.Structure(focusId = null, selectId = next.id)
+        }
+    }
+
+    /** Appends [second]'s text to [first] and removes [second]; the caret goes to the seam. */
+    private fun join(first: EditorBlock, second: EditorBlock): BlockEdit {
+        val seam = first.rich.text.length
+        first.setRich((first.rich + second.rich).withoutLineBreaksIf(first.kind == BlockKind.HEADING), TextRange(seam))
+        blocks.remove(second)
+        return BlockEdit.Structure(focusId = first.id, removedIds = listOf(second.id))
     }
 
     /** Leaves a list level, or turns a list item, quote or heading back into a paragraph. */
