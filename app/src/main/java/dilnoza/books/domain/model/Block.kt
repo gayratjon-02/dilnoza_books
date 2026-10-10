@@ -29,11 +29,5 @@ sealed interface BlockContent {
 
 enum class TextAlignment { START, CENTER, END, JUSTIFY }
 
-data class RichText(val text: String) {
-    companion object {
-        val Empty = RichText("")
-    }
-}
-
 /** Gap between neighbouring positions so a block can be inserted without renumbering its siblings. */
 const val POSITION_STEP = 1024
